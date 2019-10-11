@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "a1fs.h"
 #include "map.h"
@@ -125,12 +126,31 @@ static bool a1fs_is_present(void *image)
 static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
 	//TODO
-	//if size exceed, false on error
-	if (opts->n_inodes * 128 + 4096 * 3 > size || opts->n_inodes < 1){
+	int num_block = size/4096;
+	int num_inode_bm = ceil(opts->n_inodes/32768);
+	int num_data_bm = 1;
+	int num_inode_t = ceil(opts->n_inodes * 128 / 4096);
+	int ext_block = opts->n_inodes;
+	int used_blocks = num_inode_t + 1 + num_inode_bm + 1;
+	int rest_blocks = num_block - used_blocks;
+	if (rest_blocks - ext_block > 0){
+		num_data_bm = ceil((rest_blocks - ext_block)/32769);
+	}
+	if (used_blocks > num_block || opts->n_inodes < 1){
 		return false;}
-	struct a1fs_superblock * sb = (struct a1fs_superblock *)(image);
+	a1fs_superblock * sb = (struct a1fs_superblock *)(image);
 	sb->magic = A1FS_MAGIC;
 	sb->size = size;
+	sb->s_inodes_count = opts->n_inodes;
+	sb->s_blocks_count = num_block;
+	sb->s_free_blocks_count = num_block - 1 - num_inode_bm - num_data_bm - num_inode_t;
+	sb->s_free_inodes_count = opts->n_inodes - 1;
+	sb->bg_block_bitmap = 1;
+	sb->block_bitmap_count = num_data_bm;
+	sb->bg_inode_bitmap = 1 + num_data_bm;
+	sb->inode_bitmap_count = num_inode_bm;
+	sb->bg_inode_table = 1 + num_data_bm + num_inode_bm;
+	sb->inode_table_count = num_inode_t;
 	return true;
 }
 
