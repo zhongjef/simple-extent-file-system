@@ -52,7 +52,20 @@ typedef struct a1fs_superblock {
 	uint64_t size;
 
 	//TODO
-
+	unsigned int   s_inodes_count;      /* Inodes count */
+	unsigned int   s_blocks_count;      /* Blocks count */
+	unsigned int   s_free_blocks_count; /* Free blocks count */
+	unsigned int   s_free_inodes_count; /* Free inodes count */
+	a1fs_blk_t   bg_block_bitmap;      /* Data block bitmap block pointer */
+	unsigned int block_bitmap_count;	/* Data block bitmap count */
+	a1fs_blk_t    bg_inode_bitmap;      /* Inodes bitmap block pointer */
+	unsigned int inode_bitmap_count;/* Inodes bitmap count */
+	a1fs_blk_t   bg_inode_table;       /* Inodes table block pointer*/
+	unsigned int   inode_table_count;       /* Inodes table count */
+	a1fs_blk_t   extent_block;       /* First extent block pointer */
+	unsigned int   extent_block_count;       /* Extent block count */
+	a1fs_blk_t   data_block;       /* First data block pointer */
+	unsigned int   data_block_count;       /* Data block count */
 } a1fs_superblock;
 
 // Superblock must fit into a single block
@@ -88,7 +101,14 @@ typedef struct a1fs_inode {
 	struct timespec mtime;
 
 	//TODO
-
+	//inode number
+	a1fs_ino_t ino;
+	//number of extents
+	uint32_t extentcount;
+	//extent block
+	a1fs_blk_t extentblock;
+	//creation time stamp
+	struct timespec ctime;
 } a1fs_inode;
 
 // A single block must fit an integral number of inodes

@@ -14,7 +14,7 @@
 
 /**
  * CSC369 Assignment 1 - a1fs formatting tool.
- */
+ */ 
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -104,8 +104,10 @@ static bool parse_args(int argc, char *argv[], mkfs_opts *opts)
 static bool a1fs_is_present(void *image)
 {
 	//TODO
-	(void)image;
-	return true;
+	//If super block is set up, the image has already been formatted into a1fs.
+	struct a1fs_superblock *sb = (struct a1fs_superblock *)(image);
+	if (sb->magic == A1FS_MAGIC){return true;}
+	return false;
 }
 
 
@@ -123,10 +125,13 @@ static bool a1fs_is_present(void *image)
 static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
 	//TODO
-	(void)image;
-	(void)size;
-	(void)opts;
-	return false;
+	//if size exceed, false on error
+	if (opts->n_inodes * 128 + 4096 * 3 > size || opts->n_inodes < 1){
+		return false;}
+	struct a1fs_superblock * sb = (struct a1fs_superblock *)(image);
+	sb->magic = A1FS_MAGIC;
+	sb->size = size;
+	return true;
 }
 
 
