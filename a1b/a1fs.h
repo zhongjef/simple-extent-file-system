@@ -101,12 +101,12 @@ typedef struct a1fs_inode {
 	struct timespec mtime;
 
 	//TODO
-	//inode number
-	a1fs_ino_t ino;
 	//number of extents
 	uint32_t extentcount;
 	//extent block
 	a1fs_blk_t extentblock;
+	//directory entry count
+	uint32_t dentry_count;
 	//creation time stamp
 	struct timespec ctime;
 } a1fs_inode;

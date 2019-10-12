@@ -21,8 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <math.h>
+#include <time.h>
 
 #include "a1fs.h"
 #include "map.h"
@@ -133,8 +135,9 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	int ext_block = opts->n_inodes;
 	int used_blocks = num_inode_t + 1 + num_inode_bm + 1;
 	int rest_blocks = num_block - used_blocks;
+	int num_d_blocks = rest_blocks - ext_block;
 	if (rest_blocks - ext_block > 0){
-		num_data_bm = ceil((rest_blocks - ext_block)/32769);
+		num_data_bm = ceil(num_d_blocks/32769);
 	}
 	if (used_blocks > num_block || opts->n_inodes < 1){
 		return false;}
@@ -151,6 +154,48 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->inode_bitmap_count = num_inode_bm;
 	sb->bg_inode_table = 1 + num_data_bm + num_inode_bm;
 	sb->inode_table_count = num_inode_t;
+	int j,i;
+	// data block bitmap
+	for (j = 0; j < num_data_bm; j++){
+	unsigned char *data_bits = (unsigned char*) (image + 4096 * (j + 1));
+		if (num_d_blocks < 32768){			
+			for (i = 0; i < num_d_blocks; i++){
+				data_bits[i] = '0';
+			}
+		} else{
+			for (i = 0; i < 32768; i++){
+				data_bits[i] = '0';
+			}
+			num_d_blocks -= 32768;
+		}
+	}
+	// inode bitmap
+	int inode_count = opts->n_inodes;
+	for (j = 0; j < num_inode_bm; j++){
+	unsigned char *inode_bits = (unsigned char*) (image + 4096 * (j + 1 + num_data_bm));
+		if (inode_count < 32768){
+			for (i = 0; i < inode_count; i++){
+				inode_bits[i] = '0';
+			}
+		} else{
+			for (i = 0; i < 32768; i++){
+				inode_bits[i] = '0';
+			}
+			inode_count -= 32768;
+		}
+	}
+	// change root inode to '1'
+	unsigned char *inode_bits = (unsigned char*) (image + 4096 * (1 + num_data_bm));
+	inode_bits[0] = '1';
+	a1fs_inode * root_inode = (struct a1fs_inode *)(image + (1 + num_data_bm + num_inode_bm) * 4096);
+	root_inode->mode = 'd';
+	root_inode->links = 0;
+	root_inode->size = 0;
+	//clock_gettime(CLOCK_REALTIME, root_inode->mtime);
+	//clock_gettime(CLOCK_REALTIME, root_inode->ctime);
+	root_inode->dentry_count = 0;
+	root_inode->extentcount = 0;
+
 	return true;
 }
 
