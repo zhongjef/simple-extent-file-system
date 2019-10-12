@@ -86,7 +86,7 @@ typedef struct a1fs_extent {
 /** a1fs inode. */
 typedef struct a1fs_inode {
 	/** File mode. */
-	mode_t mode;
+	unsigned char mode;
 	/** Reference count (number of hard links). */
 	uint32_t links;
 	/** File size in bytes. */
