@@ -18,6 +18,8 @@ LDFLAGS := $(shell pkg-config fuse --libs) $(LDFLAGS)
 
 all: a1fs mkfs.a1fs
 
+test: test.o
+	$(CC) $^ -o $@
 a1fs: a1fs.o fs_ctx.o map.o options.o
 	$(CC) $^ -o $@ $(LDFLAGS)
 
@@ -33,4 +35,4 @@ OBJ_FILES = $(SRC_FILES:.c=.o)
 	$(CC) $< -o $@ -c -MMD $(CFLAGS)
 
 clean:
-	rm -f $(OBJ_FILES) $(OBJ_FILES:.o=.d) a1fs mkfs.a1fs
+	rm -f $(OBJ_FILES) $(OBJ_FILES:.o=.d) a1fs mkfs.a1fs test
