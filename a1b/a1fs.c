@@ -117,10 +117,9 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	st->f_bfree = sb->s_free_blocks_count;
 	st->f_files = sb->s_inodes_count;
 	st->f_ffree = sb->s_free_inodes_count;
-	(void)fs;
 	st->f_namemax = A1FS_NAME_MAX;
 
-	return -ENOSYS;
+	return 0;
 }
 
 /**
@@ -175,7 +174,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
 	do {  // Iterate to the inode given by absolute path
-		if (curr_inode->mode & S_ISDIR <= 0)
+		if ((curr_inode->mode & S_ISDIR) <= 0)
 			return ENOTDIR;
 		char foundPathCompo = 0;
 		a1fs_dentry *curr_dentry;
@@ -196,7 +195,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	} while (pathComponent != NULL);
 
 	// TODO what should I put here for st_mode?
-	// st->st_mode;
+	st->st_mode = curr_inode->mode;
 	st->st_nlink = (nlink_t)(curr_inode->links);
 	blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
 	if (curr_inode->size % 512 != 0)
