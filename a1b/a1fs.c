@@ -117,7 +117,6 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	st->f_bfree = sb->s_free_blocks_count;
 	st->f_files = sb->s_inodes_count;
 	st->f_ffree = sb->s_free_inodes_count;
-	(void)fs;
 	st->f_namemax = A1FS_NAME_MAX;
 
 	return 0;
