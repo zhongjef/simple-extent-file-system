@@ -142,19 +142,12 @@ static int a1fs_getattr(const char *path, struct stat *st)
 
 	memset(st, 0, sizeof(*st));
 
-	//NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	if (strcmp(path, "/") == 0) {
-		st->st_mode = S_IFDIR | 0777;
-		return 0;
-	}
-
-	//NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	if (strcmp(path, "/") == 0) {
-		st->st_mode = S_IFDIR | 0777;
-		return 0;
-	}
+	// //NOTE: This is just a placeholder that allows the file system to be mounted
+	// // without errors. You should remove this from your implementation.
+	// if (strcmp(path, "/") == 0) {
+	// 	st->st_mode = S_IFDIR | 0777;
+	// 	return 0;
+	// }
 
 	// Use the copied path to parse into each path compoenent
 	char cpy_path[strlen(path) + 1];
@@ -176,7 +169,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	uint32_t dentry_count = curr_inode->dentry_count;
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
-	do {// Iterate to the inode given by absolute path
+	do {  // Iterate to the inode given by absolute path
 		if (!S_ISDIR(curr_inode->mode))
 			return ENOTDIR;
 		char pathCompoFound = 0;
