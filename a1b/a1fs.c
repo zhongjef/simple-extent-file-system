@@ -175,7 +175,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	// iterating at least once.
 	do {  // Iterate to the inode given by absolute path
 		if (!S_ISDIR(curr_inode->mode))
-			return ENOTDIR;
+			return -ENOTDIR;
 		char foundPathCompo = 0;
 		a1fs_dentry *curr_dentry;
 		for (uint32_t i = 0; i < dentry_count; i++)
