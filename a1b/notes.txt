@@ -1,0 +1,41 @@
+Questions:
+
+    1. ( ) Why do we put a minus sign in front of the error code? (getattr() in a1fs.c)
+        - Why is the convention to returna  negated error code?
+
+    2. (Fixed) For a1fs_getattr(), what if the path name is root?
+        - Use a do while loop to deal with the root inode first.
+
+    3. ( ) How should we fill in st->st_mode in a1fs_getattr?
+
+    4. ( ) Should we really set a1fs_extent.count's type to a1fs_blk_t? Is this set by prof?
+
+Notes:
+
+    - Only implement these for struct stat
+        struct stat {
+            mode_t    st_mode;    /* protection */
+            nlink_t   st_nlink;   /* number of hard links */
+            off_t     st_size;    /* total size, in bytes */
+            blkcnt_t  st_blocks;  /* number of 512B blocks allocated */
+            time_t    st_mtime;   /* time of last modification */
+        };
+
+    - 256 bytes per dentry, then an directory could contain 8192 dentries at max.
+
+    - How to visit a file/dir from absolute path:
+        1. Go to superblock for root inode
+        1.5 In root inode, take the dentry_count, go to the corresponding extent
+        2. In curr( inode, take the dentry_count, go to the corresponding extent
+        3. do a for-loop to search for the dir_name in path
+        4. Go to the corresponding inode
+        5. repeat 2~4 until all the end of absolute path (NULL)
+
+    -   struct timespec {
+           time_t tv_sec;                /* Seconds */
+           long   tv_nsec;               /* Nanoseconds */
+        };
+
+Todos:
+    - Extend step 2 in a1fs_getattr
+    - Fill in st->st_mode in a1fs_getattr
