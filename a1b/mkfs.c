@@ -130,15 +130,10 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	//TODO
 	int num_block = size/4096;
 	int num_inode_bm = ceil(opts->n_inodes/32768);
-	int num_data_bm = 1;
-	int num_inode_t = ceil(opts->n_inodes * 128 / 4096);
-	int ext_block = opts->n_inodes;
-	int used_blocks = num_inode_t + 1 + num_inode_bm + 1;
-	int rest_blocks = num_block - used_blocks;
-	int num_d_blocks = rest_blocks - ext_block;
-	if (rest_blocks - ext_block > 0){
-		num_data_bm = ceil(num_d_blocks/32769);
-	}
+	int num_data_bm = ceil(num_block/32769);
+	int num_inode_t = ceil(opts->n_inodes * sizeof(a1fs_inode) / 4096);
+	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1;
+	int num_d_blocks = num_block - used_blocks;
 	if (used_blocks > num_block || opts->n_inodes < 1){
 		return false;}
 	a1fs_superblock * sb = (struct a1fs_superblock *)(image);
@@ -154,6 +149,8 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->inode_bitmap_count = num_inode_bm;
 	sb->bg_inode_table = 1 + num_data_bm + num_inode_bm;
 	sb->inode_table_count = num_inode_t;
+	sb->data_block = 1 + num_data_bm + num_inode_bm + num_inode_t;
+	sb->data_block_count = 0;
 	int j,i;
 	// data block bitmap
 	for (j = 0; j < num_data_bm; j++){
@@ -192,7 +189,6 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	root_inode->links = 0;
 	root_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &root_inode->mtime);
-	// clock_gettime(CLOCK_REALTIME, &root_inode->ctime);
 	root_inode->dentry_count = 0;
 	root_inode->extentcount = 0;
 	root_inode->mode = 'd';

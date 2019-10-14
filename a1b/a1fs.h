@@ -62,8 +62,6 @@ typedef struct a1fs_superblock {
 	unsigned int inode_bitmap_count;/* Inodes bitmap block count */
 	a1fs_blk_t   bg_inode_table;       /* Inodes table block pointer*/
 	unsigned int   inode_table_count;       /* Inodes table count */
-	a1fs_blk_t   extent_block;       /* First extent block pointer */
-	unsigned int   extent_block_count;       /* Extent block count */
 	a1fs_blk_t   data_block;       /* First data block pointer */
 	unsigned int   data_block_count;       /* Data block count */
 } a1fs_superblock;
