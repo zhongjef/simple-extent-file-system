@@ -120,7 +120,7 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	(void)fs;
 	st->f_namemax = A1FS_NAME_MAX;
 
-	return -ENOSYS;
+	return 0;
 }
 
 /**
