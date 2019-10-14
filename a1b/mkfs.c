@@ -23,12 +23,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <math.h>
 #include <time.h>
 
 #include "a1fs.h"
 #include "map.h"
-
 
 /** Command line options. */
 typedef struct mkfs_opts {
@@ -49,6 +47,15 @@ typedef struct mkfs_opts {
 	bool zero;
 
 } mkfs_opts;
+
+int my_ceil(int x, int y)
+{	
+	int result = x / y;
+	if(x % y != 0){
+		result += 1;
+	}
+	return result;	
+}
 
 static const char *help_str = "\
 Usage: %s options image\n\
@@ -129,9 +136,9 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
 	//TODO
 	int num_block = size/4096;
-	int num_inode_bm = ceil(opts->n_inodes/32768);
-	int num_data_bm = ceil(num_block/32769);
-	int num_inode_t = ceil(opts->n_inodes * sizeof(a1fs_inode) / 4096);
+	int num_inode_bm = my_ceil(opts->n_inodes, 32768);
+	int num_data_bm = my_ceil(num_block, 32769);
+	int num_inode_t = my_ceil(opts->n_inodes * sizeof(a1fs_inode), 4096);
 	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1;
 	int num_d_blocks = num_block - used_blocks;
 	if (used_blocks > num_block || opts->n_inodes < 1){
