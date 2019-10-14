@@ -177,20 +177,20 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	do {  // Iterate to the inode given by absolute path
 		if (!S_ISDIR(curr_inode->mode))
 			return ENOTDIR;
-		char pathCompoFound = 0;
+		char foundPathCompo = 0;
 		a1fs_dentry *curr_dentry;
 		for (uint32_t i = 0; i < dentry_count; i++)
 		{
 			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
 			if (strcmp(curr_dentry->name, pathComponent) == 0)
 			{
-				pathCompoFound = 1;
+				foundPathCompo = 1;
 				a1fs_ino_t next_ino_num = curr_dentry->ino;
 				curr_inode = inode_table + (sizeof(a1fs_inode) * next_ino_num);
 				break;
 			}
 		}
-		if (!pathCompoFound)
+		if (!foundPathCompo)
 			return -ENOENT;
 		pathComponent = strtok(NULL, delim);
 	} while (pathComponent != NULL);
