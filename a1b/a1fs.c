@@ -196,7 +196,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	} while (pathComponent != NULL);
 
 	// TODO what should I put here for st_mode?
-	// st->st_mode;
+	st->st_mode = curr_inode->mode;
 	st->st_nlink = (nlink_t)(curr_inode->links);
 	blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
 	if (curr_inode->size % 512 != 0)
