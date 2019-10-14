@@ -192,7 +192,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	root_inode->links = 0;
 	root_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &root_inode->mtime);
-	clock_gettime(CLOCK_REALTIME, &root_inode->ctime);
+	// clock_gettime(CLOCK_REALTIME, &root_inode->ctime);
 	root_inode->dentry_count = 0;
 	root_inode->extentcount = 0;
 	root_inode->mode = 'd';
