@@ -1,14 +1,16 @@
 Questions:
 
-    1. ( ) Why do we put a minus sign in front of the error code? (getattr() in a1fs.c)
-        - Why is the convention to returna  negated error code?
+    1. (Fixed) Why do we put a minus sign in front of the error code? (getattr() in a1fs.c)
+        - It is the convention to return a negated error code
 
     2. (Fixed) For a1fs_getattr(), what if the path name is root?
         - Use a do while loop to deal with the root inode first.
 
     3. ( ) How should we fill in st->st_mode in a1fs_getattr?
 
-    4. ( ) Should we really set a1fs_extent.count's type to a1fs_blk_t? Is this set by prof?
+    4. (Fixed) Should we really set a1fs_extent.start's type to a1fs_blk_t?
+        - The a1fs_extent.start is actually not a pointer to block
+          but a block number of the block containing the extent. 
 
 Notes:
 
@@ -41,6 +43,6 @@ Todos:
         - ( ) Extend step 2 in a1fs_getattr
         - ( ) Fill in st->st_mode in a1fs_getattr
     - mkfs.c:
-        - ( ) Write bit to bit using shift and mask
+        - (Done) Write bit to bit
             - Reason: asicii code for '0' is 48, thus writing '0' to disk does not work
         - ( ) Initialize the extent for root inode and root directory
