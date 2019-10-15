@@ -150,42 +150,29 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->s_blocks_count = num_block;
 	sb->s_free_blocks_count = num_block - 1 - num_inode_bm - num_data_bm - num_inode_t;
 	sb->s_free_inodes_count = opts->n_inodes - 1;
-	sb->bg_block_bitmap = 1;
+	sb->block_bitmap = (a1fs_blk_t) (image + 1 * A1FS_BLOCK_SIZE);
 	sb->block_bitmap_count = num_data_bm;
-	sb->bg_inode_bitmap = 1 + num_data_bm;
+	sb->inode_bitmap = (a1fs_blk_t) (image + (1 + num_data_bm) * A1FS_BLOCK_SIZE);
 	sb->inode_bitmap_count = num_inode_bm;
-	sb->bg_inode_table = 1 + num_data_bm + num_inode_bm;
+	sb->inode_table = (a1fs_inode *) (image + (1 + num_data_bm + num_inode_bm) * A1FS_BLOCK_SIZE);
 	sb->inode_table_count = num_inode_t;
-	sb->data_block = 1 + num_data_bm + num_inode_bm + num_inode_t;
+	sb->data_block = (a1fs_blk_t) (image + (1 + num_data_bm + num_inode_bm + num_inode_t) * A1FS_BLOCK_SIZE);
 	sb->data_block_count = 0;
 	int j,i;
 	// data block bitmap
 	for (j = 0; j < num_data_bm; j++){
-	unsigned char *data_bits = (unsigned char*) (image + 4096 * (j + 1));
-		if (num_d_blocks < 32768){			
-			for (i = 0; i < num_d_blocks; i++){
-				data_bits[i] = '0';
-			}
-		} else{
-			for (i = 0; i < 32768; i++){
-				data_bits[i] = '0';
-			}
-			num_d_blocks -= 32768;
+		unsigned char *data_bits = (unsigned char*) (image + 4096 * (j + 1));
+		// Just fill the entire table with 0 bits, who cares overkill lol
+		for (i = 0; i < 32768; i+=8) {
+			*(data_bits + i) = 0; // int 0 = 8 bits 00000000
 		}
 	}
 	// inode bitmap
 	int inode_count = opts->n_inodes;
 	for (j = 0; j < num_inode_bm; j++){
-	unsigned char *inode_bits = (unsigned char*) (image + 4096 * (j + 1 + num_data_bm));
-		if (inode_count < 32768){
-			for (i = 0; i < inode_count; i++){
-				inode_bits[i] = '0';
-			}
-		} else{
-			for (i = 0; i < 32768; i++){
-				inode_bits[i] = '0';
-			}
-			inode_count -= 32768;
+		unsigned char *inode_bits = (unsigned char*) (image + 4096 * (j + 1 + num_data_bm));
+		for (i = 0; i < 32768; i += 8) {
+			*(inode_bits + i) = 0;
 		}
 	}
 	// change root inode to '1'

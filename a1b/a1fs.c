@@ -160,7 +160,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	char *pathComponent = strtok(cpy_path, delim);
 
 	a1fs_superblock *sb = fs->image;
-	a1fs_inode *inode_table = (a1fs_inode *)(fs->image + A1FS_BLOCK_SIZE * (1 + sb->block_bitmap_count + sb->inode_bitmap_count));
+	a1fs_inode *inode_table = (a1fs_inode *)(sb->inode_table);
 
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would

@@ -15,7 +15,8 @@
 
 int main()
 {
-	printf("%ld", sizeof(a1fs_blk_t));
+	printf("%d\n", (int)'0');
+	// printf("%ld", sizeof(a1fs_blk_t));
 	// char str[] = "/strtok/needs/to";
 	// char delim[] = "/";
 

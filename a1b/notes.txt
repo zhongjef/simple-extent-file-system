@@ -37,5 +37,10 @@ Notes:
         };
 
 Todos:
-    - Extend step 2 in a1fs_getattr
-    - Fill in st->st_mode in a1fs_getattr
+    - a1fs.c:
+        - ( ) Extend step 2 in a1fs_getattr
+        - ( ) Fill in st->st_mode in a1fs_getattr
+    - mkfs.c:
+        - ( ) Write bit to bit using shift and mask
+            - Reason: asicii code for '0' is 48, thus writing '0' to disk does not work
+        - ( ) Initialize the extent for root inode and root directory

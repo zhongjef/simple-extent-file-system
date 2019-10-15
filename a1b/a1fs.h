@@ -51,19 +51,18 @@ typedef struct a1fs_superblock {
 	/** File system size in bytes. */
 	uint64_t size;
 
-	//TODO
 	unsigned int   s_inodes_count;      /* Inodes count */
 	unsigned int   s_blocks_count;      /* Data Blocks count */
 	unsigned int   s_free_blocks_count; /* Free blocks count */
 	unsigned int   s_free_inodes_count; /* Free inodes count */
-	a1fs_blk_t   bg_block_bitmap;      /* Data block bitmap block pointer */
-	unsigned int block_bitmap_count;	/* Data block bitmap block count */
-	a1fs_blk_t    bg_inode_bitmap;      /* Inodes bitmap block pointer */
-	unsigned int inode_bitmap_count;/* Inodes bitmap block count */
-	a1fs_blk_t   bg_inode_table;       /* Inodes table block pointer*/
-	unsigned int   inode_table_count;       /* Inodes table count */
-	a1fs_blk_t   data_block;       /* First data block pointer */
-	unsigned int   data_block_count;       /* Data block count */
+	a1fs_blk_t     block_bitmap;        /* Data block bitmap block pointer */
+	unsigned int   block_bitmap_count;	/* Data block bitmap block count */
+	a1fs_blk_t     inode_bitmap;        /* Inodes bitmap block pointer */
+	unsigned int   inode_bitmap_count;  /* Inodes bitmap block count */
+	a1fs_inode *   inode_table;         /* Inodes table block pointer*/
+	unsigned int   inode_table_count;   /* Inodes table count */
+	a1fs_blk_t     data_block;          /* First data block pointer */
+	unsigned int   data_block_count;    /* Data block count */
 } a1fs_superblock;
 
 // Superblock must fit into a single block
