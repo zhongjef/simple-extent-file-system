@@ -149,13 +149,13 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->s_blocks_count = num_block;
 	sb->s_free_blocks_count = num_block - 1 - num_inode_bm - num_data_bm - num_inode_t;
 	sb->s_free_inodes_count = opts->n_inodes - 1;
-	sb->block_bitmap = (a1fs_blk_t) (image + 1 * A1FS_BLOCK_SIZE);
+	sb->bg_block_bitmap = (a1fs_blk_t) (1);
 	sb->block_bitmap_count = num_data_bm;
-	sb->inode_bitmap = (a1fs_blk_t) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm));
+	sb->bg_inode_bitmap = (a1fs_blk_t) (1 + num_data_bm);
 	sb->inode_bitmap_count = num_inode_bm;
-	sb->inode_table = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm));
+	sb->bg_inode_table = (a1fs_blk_t) (1 + num_data_bm + num_inode_bm);
 	sb->inode_table_count = num_inode_t;
-	sb->data_block = (a1fs_blk_t) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm + num_inode_t));
+	sb->bg_data_block = (a1fs_blk_t) (1 + num_data_bm + num_inode_bm + num_inode_t);
 	sb->data_block_count = 0;
 	int j,i;
 	int num_int_bits = sizeof(int) * 8;
@@ -172,7 +172,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 		for (i = 0; i < BITS_PER_BLOCK; i += num_int_bits)
 			*(inode_bits + i) = 0;
 	}
-	int num_d_blocks = num_block - used_blocks;
+	// int num_d_blocks = num_block - used_blocks;
 
 	// change root inode to '1'
 	unsigned char *inode_bits = (unsigned char*) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm));

@@ -160,16 +160,16 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	char *pathComponent = strtok(cpy_path, delim);
 
 	a1fs_superblock *sb = fs->image;
-	a1fs_inode *inode_table = (a1fs_inode *)(sb->inode_table);
+	a1fs_inode *inode_table = (a1fs_inode *)(fs->image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
 
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
 	//       have to look into other blocks within the same extent, or even
 	//       other extents.
 
-	a1fs_inode *curr_inode = (a1fs_inode *)inode_table;
-	a1fs_extent *curr_extent = (a1fs_extent *)(curr_inode->extentblock);
-	a1fs_blk_t curr_dir = (a1fs_blk_t)curr_extent->start;
+	a1fs_inode *curr_inode = (a1fs_inode *) inode_table;
+	a1fs_extent *curr_extent = (a1fs_extent *) (curr_inode->extentblock);
+	a1fs_dentry *curr_dir = (a1fs_dentry *) (fs->image + A1FS_BLOCK_SIZE*curr_extent->start);
 	uint32_t dentry_count = curr_inode->dentry_count;
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
