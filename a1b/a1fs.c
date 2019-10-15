@@ -143,6 +143,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 {
 	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
 	fs_ctx *fs = get_fs();
+	void *image = fs->image;
 
 	memset(st, 0, sizeof(*st));
 
@@ -159,8 +160,8 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	char delim[] = "/";
 	char *pathComponent = strtok(cpy_path, delim);
 
-	a1fs_superblock *sb = fs->image;
-	a1fs_inode *inode_table = (a1fs_inode *)(fs->image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	a1fs_superblock *sb = image;
+	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
 
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
@@ -168,14 +169,18 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	//       other extents.
 
 	a1fs_inode *curr_inode = (a1fs_inode *) inode_table;
-	a1fs_extent *curr_extent = (a1fs_extent *) (curr_inode->extentblock);
-	a1fs_dentry *curr_dir = (a1fs_dentry *) (fs->image + A1FS_BLOCK_SIZE*curr_extent->start);
-	uint32_t dentry_count = curr_inode->dentry_count;
+	a1fs_extent *curr_extent;
+	a1fs_dentry *curr_dir;
+	uint32_t dentry_count;
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
 	do {  // Iterate to the inode given by absolute path
-		if ((curr_inode->mode & S_IFDIR) <= 0)
+		if (curr_inode->mode == 'd')
 			return -ENOTDIR;
+		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
+		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+		dentry_count = curr_inode->dentry_count;
+		
 		char foundPathCompo = 0;
 		a1fs_dentry *curr_dentry;
 		for (uint32_t i = 0; i < dentry_count; i++)

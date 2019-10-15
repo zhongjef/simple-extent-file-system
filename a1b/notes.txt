@@ -45,4 +45,5 @@ Todos:
     - mkfs.c:
         - (Done) Write bit to bit
             - Reason: asicii code for '0' is 48, thus writing '0' to disk does not work
-        - ( ) Initialize the extent for root inode and root directory
+        - (Done) Initialize the extent for root inode and root directory
+            - ( ) But shouldnt root node go with empty extent at initialization?

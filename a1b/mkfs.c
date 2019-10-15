@@ -48,13 +48,18 @@ typedef struct mkfs_opts {
 
 } mkfs_opts;
 
-int ceil_divide(int x, int y)
-{	
+int ceil_divide(int x, int y) {	
 	int result = x / y;
 	if(x % y != 0){
 		result += 1;
 	}
 	return result;	
+}
+
+// Set the i-th index of the bitmap to 1
+void setBitOn(uint32_t *A, uint32_t i) {
+	int int_bits = sizeof(uint32_t) * 8;
+	A[i/int_bits] |= 1 << (i%int_bits);
 }
 
 static const char *help_str = "\
@@ -161,31 +166,46 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	int num_int_bits = sizeof(int) * 8;
 	// data block bitmap
 	for (j = 0; j < num_data_bm; j++) {
-		unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1));
+		a1fs_blk_t *data_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (j + 1));
 		// Just fill the entire table with 0 bits, who cares overkill lol
 		for (i = 0; i < BITS_PER_BLOCK; i+=num_int_bits)
 			*(data_bits + i) = 0; // int 0 = 32 zero bits
 	}
 	// inode bitmap
 	for (j = 0; j < num_inode_bm; j++) {
-		unsigned char *inode_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1 + num_data_bm));
+		a1fs_blk_t *inode_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (j + 1 + num_data_bm));
 		for (i = 0; i < BITS_PER_BLOCK; i += num_int_bits)
 			*(inode_bits + i) = 0;
 	}
-	// int num_d_blocks = num_block - used_blocks;
 
 	// change root inode to '1'
-	unsigned char *inode_bits = (unsigned char*) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm));
-	inode_bits[0] = '1';
-	a1fs_inode * root_inode = (struct a1fs_inode *)(image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm));
+	a1fs_blk_t *inode_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_bitmap));
+	setBitOn(inode_bits, 0);
+	sb->s_free_inodes_count--;
+	a1fs_inode * root_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table));
 	root_inode->mode = 'd';
 	root_inode->links = 0;
 	root_inode->size = 0;
-	clock_gettime(CLOCK_REALTIME, &root_inode->mtime);
+	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->dentry_count = 0;
-	root_inode->extentcount = 0;
-	root_inode->mode = 'd';
+	// Allocate root inode's extent block
+	a1fs_blk_t *data_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (sb->bg_block_bitmap));
+	setBitOn(data_bits, 0);
+	sb->s_free_blocks_count--;
+	root_inode->extentblock = sb->bg_data_block;
+	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*root_inode->extentblock);
+	a1fs_extent *curr_extent = extentblock;
 	
+	// Allocate directory entries for testing purposes
+	// TODO: Root dir should be empty first
+	setBitOn(data_bits, 1);
+	sb->s_free_blocks_count--;
+	curr_extent->start = sb->bg_data_block + 1;
+	curr_extent->count = 1;
+	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+	root_inode->dentry_count += 2;
+	curr_dir->ino = 0;
+	strncat(curr_dir->name, "/", sizeof(curr_dir->name) - strlen("/") - 1);
 	return true;
 }
 
