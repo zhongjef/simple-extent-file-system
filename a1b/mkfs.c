@@ -48,7 +48,7 @@ typedef struct mkfs_opts {
 
 } mkfs_opts;
 
-int my_ceil(int x, int y)
+int ceil_divide(int x, int y)
 {	
 	int result = x / y;
 	if(x % y != 0){
@@ -135,13 +135,12 @@ static bool a1fs_is_present(void *image)
 static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
 	//TODO
-	int num_block = size/4096;
-	int num_inode_bm = my_ceil(opts->n_inodes, 32768);
-	int num_data_bm = my_ceil(num_block, 32769);
-	int num_inode_t = my_ceil(opts->n_inodes * sizeof(a1fs_inode), 4096);
+	int num_block = size / A1FS_BLOCK_SIZE;
+	int num_inode_bm = ceil_divide(opts->n_inodes, BITS_PER_BLOCK);
+	int num_data_bm = ceil_divide(num_block, BITS_PER_BLOCK);
+	int num_inode_t = ceil_divide(opts->n_inodes * sizeof(a1fs_inode), A1FS_BLOCK_SIZE);
 	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1;
-	int num_d_blocks = num_block - used_blocks;
-	if (used_blocks > num_block || opts->n_inodes < 1){
+	if (used_blocks > num_block || opts->n_inodes < 1) {
 		return false;}
 	a1fs_superblock * sb = (struct a1fs_superblock *)(image);
 	sb->magic = A1FS_MAGIC;
@@ -152,33 +151,33 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->s_free_inodes_count = opts->n_inodes - 1;
 	sb->block_bitmap = (a1fs_blk_t) (image + 1 * A1FS_BLOCK_SIZE);
 	sb->block_bitmap_count = num_data_bm;
-	sb->inode_bitmap = (a1fs_blk_t) (image + (1 + num_data_bm) * A1FS_BLOCK_SIZE);
+	sb->inode_bitmap = (a1fs_blk_t) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm));
 	sb->inode_bitmap_count = num_inode_bm;
-	sb->inode_table = (a1fs_inode *) (image + (1 + num_data_bm + num_inode_bm) * A1FS_BLOCK_SIZE);
+	sb->inode_table = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm));
 	sb->inode_table_count = num_inode_t;
-	sb->data_block = (a1fs_blk_t) (image + (1 + num_data_bm + num_inode_bm + num_inode_t) * A1FS_BLOCK_SIZE);
+	sb->data_block = (a1fs_blk_t) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm + num_inode_t));
 	sb->data_block_count = 0;
 	int j,i;
+	int num_int_bits = sizeof(int) * 8;
 	// data block bitmap
-	for (j = 0; j < num_data_bm; j++){
-		unsigned char *data_bits = (unsigned char*) (image + 4096 * (j + 1));
+	for (j = 0; j < num_data_bm; j++) {
+		unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1));
 		// Just fill the entire table with 0 bits, who cares overkill lol
-		for (i = 0; i < 32768; i+=8) {
-			*(data_bits + i) = 0; // int 0 = 8 bits 00000000
-		}
+		for (i = 0; i < BITS_PER_BLOCK; i+=num_int_bits)
+			*(data_bits + i) = 0; // int 0 = 32 zero bits
 	}
 	// inode bitmap
-	int inode_count = opts->n_inodes;
-	for (j = 0; j < num_inode_bm; j++){
-		unsigned char *inode_bits = (unsigned char*) (image + 4096 * (j + 1 + num_data_bm));
-		for (i = 0; i < 32768; i += 8) {
+	for (j = 0; j < num_inode_bm; j++) {
+		unsigned char *inode_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1 + num_data_bm));
+		for (i = 0; i < BITS_PER_BLOCK; i += num_int_bits)
 			*(inode_bits + i) = 0;
-		}
 	}
+	int num_d_blocks = num_block - used_blocks;
+
 	// change root inode to '1'
-	unsigned char *inode_bits = (unsigned char*) (image + 4096 * (1 + num_data_bm));
+	unsigned char *inode_bits = (unsigned char*) (image + A1FS_BLOCK_SIZE * (1 + num_data_bm));
 	inode_bits[0] = '1';
-	a1fs_inode * root_inode = (struct a1fs_inode *)(image + (1 + num_data_bm + num_inode_bm) * 4096);
+	a1fs_inode * root_inode = (struct a1fs_inode *)(image + A1FS_BLOCK_SIZE * (1 + num_data_bm + num_inode_bm));
 	root_inode->mode = 'd';
 	root_inode->links = 0;
 	root_inode->size = 0;

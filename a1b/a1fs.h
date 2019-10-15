@@ -33,6 +33,8 @@
  * individual inode) must also occupy an integral number of blocks.
  */
 #define A1FS_BLOCK_SIZE 4096
+#define BITS_PER_BLOCK (A1FS_BLOCK_SIZE * 8)
+
 
 /** Block number (block pointer) type. */
 typedef uint32_t a1fs_blk_t;
@@ -43,31 +45,6 @@ typedef uint32_t a1fs_ino_t;
 
 /** Magic value that can be used to identify an a1fs image. */
 #define A1FS_MAGIC 0xC5C369A1C5C369A1ul
-
-/** a1fs superblock. */
-typedef struct a1fs_superblock {
-	/** Must match A1FS_MAGIC. */
-	uint64_t magic;
-	/** File system size in bytes. */
-	uint64_t size;
-
-	unsigned int   s_inodes_count;      /* Inodes count */
-	unsigned int   s_blocks_count;      /* Data Blocks count */
-	unsigned int   s_free_blocks_count; /* Free blocks count */
-	unsigned int   s_free_inodes_count; /* Free inodes count */
-	a1fs_blk_t     block_bitmap;        /* Data block bitmap block pointer */
-	unsigned int   block_bitmap_count;	/* Data block bitmap block count */
-	a1fs_blk_t     inode_bitmap;        /* Inodes bitmap block pointer */
-	unsigned int   inode_bitmap_count;  /* Inodes bitmap block count */
-	a1fs_inode *   inode_table;         /* Inodes table block pointer*/
-	unsigned int   inode_table_count;   /* Inodes table count */
-	a1fs_blk_t     data_block;          /* First data block pointer */
-	unsigned int   data_block_count;    /* Data block count */
-} a1fs_superblock;
-
-// Superblock must fit into a single block
-static_assert(sizeof(a1fs_superblock) <= A1FS_BLOCK_SIZE,
-              "superblock is too large");
 
 
 /** Extent - a contiguous range of blocks. */
@@ -110,6 +87,32 @@ typedef struct a1fs_inode {
 
 // A single block must fit an integral number of inodes
 static_assert(A1FS_BLOCK_SIZE % sizeof(a1fs_inode) == 0, "invalid inode size");
+
+
+/** a1fs superblock. */
+typedef struct a1fs_superblock {
+	/** Must match A1FS_MAGIC. */
+	uint64_t magic;
+	/** File system size in bytes. */
+	uint64_t size;
+
+	unsigned int   s_inodes_count;      /* Inodes count */
+	unsigned int   s_blocks_count;      /* Data Blocks count */
+	unsigned int   s_free_blocks_count; /* Free blocks count */
+	unsigned int   s_free_inodes_count; /* Free inodes count */
+	a1fs_blk_t     block_bitmap;        /* Data block bitmap block pointer */
+	unsigned int   block_bitmap_count;	/* Data block bitmap block count */
+	a1fs_blk_t     inode_bitmap;        /* Inodes bitmap block pointer */
+	unsigned int   inode_bitmap_count;  /* Inodes bitmap block count */
+	a1fs_inode *   inode_table;         /* Inodes table block pointer*/
+	unsigned int   inode_table_count;   /* Inodes table count */
+	a1fs_blk_t     data_block;          /* First data block pointer */
+	unsigned int   data_block_count;    /* Data block count */
+} a1fs_superblock;
+
+// Superblock must fit into a single block
+static_assert(sizeof(a1fs_superblock) <= A1FS_BLOCK_SIZE,
+              "superblock is too large");
 
 
 /** Maximum file name (path component) length. Includes the null terminator. */
