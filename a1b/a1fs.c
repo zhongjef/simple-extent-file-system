@@ -175,7 +175,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
 	do {  // Iterate to the inode given by absolute path
-		if (curr_inode->mode == 'd')
+		if (curr_inode->mode != 'd')
 			return -ENOTDIR;
 		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
 		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);

@@ -12,6 +12,11 @@ Questions:
         - The a1fs_extent.start is actually not a pointer to block
           but a block number of the block containing the extent.
 
+    5. (Fixed) Should we initialize all inodes on disk formatting?
+        - Each inode would have to be intialized with a extent block to store . and .. directory.
+        - Answer:
+            - Yes it is possible to allocate inode at run time since the super block keeps track of free inodes count.
+
 Notes:
 
     - Only implement these for struct stat
@@ -39,11 +44,15 @@ Notes:
         };
 
     - How to read all dentry under an inode?
-    1. Go to the first extent
-    2. Interate through the directory entries using dentry_count
-    3. If there are still some extent left go to 4
-    4. go to the next extent block
-    5. repeat 2 to 5 until all entries are iterated
+        1. Go to the first extent
+        2. Interate through the directory entries using dentry_count
+        3. If there are still some extent left go to 4
+        4. go to the next extent block
+        5. repeat 2 to 5 until all entries are iterated
+
+    - How to find pid for a process?
+        - use pidof <process>, e.g. pidof firefox
+    
 
 Todos:
     - a1fs.c:
