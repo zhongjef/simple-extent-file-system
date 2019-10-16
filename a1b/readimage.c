@@ -21,6 +21,22 @@ int ceil_divide(int x, int y) {
 	}
 	return result;	
 }
+void print_bitmap(unsigned char *bm, int size) {
+    int i, j;
+    for(i = 0; i < size; i++) {
+        for (j = 0; j < 8; j++) {
+            unsigned char mask = 1 << j;
+            if (bm[i] & mask) {
+                printf("1");
+            }
+            else {
+                printf("0");
+            }
+        }
+        printf(" ");
+    }
+    printf("\n");
+}
 int main(int argc, char **argv)
 {
 
@@ -65,27 +81,14 @@ int main(int argc, char **argv)
     // Print Inode Bitmap
     printf("Inode bitmap: ");
     unsigned char *inode_bitmap = (unsigned char *)(disk + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
-    for (int bit = 0; bit <= sb->s_inodes_count; bit++)
-    {
-        printf("%d", (inode_bitmap[bit] & (1 << bit)) > 0);
-        if (bit != 0 && bit % 5 == 0)
-        {
-            printf(" ");
-        }
-    }
+    print_bitmap(inode_bitmap, sb->s_inodes_count);
     printf("\n");
 
     // Print Block Bitmap
     printf("Block bitmap: ");
     unsigned char *block_bitmap = (unsigned char *)(disk + A1FS_BLOCK_SIZE);
-    for (int bit = 0; bit <= sb->data_block_count; bit++)
-    {
-        printf("%d", (block_bitmap[bit] & (1 << bit)) > 0);
-        if (bit != 0 && bit % 5 == 0)
-        {
-            printf(" ");
-        }
-    }
+    print_bitmap(block_bitmap, sb->data_block_count);
+    
     printf("\n");
 
     // Print Inode
@@ -96,7 +99,7 @@ int main(int argc, char **argv)
         if((inode_bitmap[bit] & (1 << bit)) > 0){  // bit map is 1
             inode = (void *)(inode_block + bit* sizeof(a1fs_inode));
             // bitmap count starts form 0
-            printf("Inode: Inode#: %d\n Number of Link: %d\n Extend Block: %d\n Mode: %d\n Dentry: %ld\n", bit, inode->links, inode->extentcount, inode->mode, inode->dentry_count);
+            printf("Inode: Inode#: %d\n Number of Link: %d\n Extend Block: %d\n Mode: %c\n Dentry: %ld\n", bit, inode->links, inode->extentcount, inode->mode, inode->dentry_count);
         }
     }
     printf("\n");

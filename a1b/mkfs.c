@@ -57,9 +57,9 @@ int ceil_divide(int x, int y) {
 }
 
 // Set the i-th index of the bitmap to 1
-void setBitOn(uint32_t *A, uint32_t i) {
-	int int_bits = sizeof(uint32_t) * 8;
-	A[i/int_bits] |= 1 << (i%int_bits);
+void setBitOn(unsigned char *A, uint32_t i) {
+	int char_bits = sizeof(unsigned char) * 8;
+	A[i/char_bits] |= 1 << (i%char_bits);
 }
 
 static const char *help_str = "\
@@ -181,7 +181,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	}
 	
 	// change root inode to '1'
-	a1fs_blk_t *inode_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_bitmap));
+	unsigned char *inode_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_bitmap));
 	setBitOn(inode_bits, 0);
 	sb->s_free_inodes_count--;
 	a1fs_inode * root_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table));
@@ -191,22 +191,22 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->dentry_count = 0;
 	// Allocate root inode's extent block
-	a1fs_blk_t *data_bits = (a1fs_blk_t *) (image + A1FS_BLOCK_SIZE * (sb->bg_block_bitmap));
+	unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (sb->bg_block_bitmap));
 	setBitOn(data_bits, 0);
-	//root_inode->extentblock = sb->bg_data_block;
-	//a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*root_inode->extentblock);
-	//a1fs_extent *curr_extent = extentblock;
+	root_inode->extentblock = sb->bg_data_block;
+	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*root_inode->extentblock);
+	a1fs_extent *curr_extent = extentblock;
 	
 	// Allocate directory entries for testing purposes
 	// TODO: Root dir should be empty first
-	//setBitOn(data_bits, 1);
-	//sb->s_free_blocks_count--;
-	//curr_extent->start = sb->bg_data_block + 1;
-	//curr_extent->count = 1;
-	//a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
-	//root_inode->dentry_count += 2;
-	//curr_dir->ino = 0;
-	//strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
+	setBitOn(data_bits, 1);
+	sb->s_free_blocks_count--;
+	curr_extent->start = sb->bg_data_block + 1;
+	curr_extent->count = 1;
+	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+	root_inode->dentry_count += 2;
+	curr_dir->ino = 0;
+	strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
 	return true; 
 }
 
