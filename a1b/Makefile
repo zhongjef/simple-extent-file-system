@@ -20,6 +20,7 @@ all: a1fs mkfs.a1fs test
 
 test: test.o fs_ctx.o map.o options.o map.o
 	$(CC) $^ -o $@ $(LDFLAGS)
+	
 a1fs: a1fs.o fs_ctx.o map.o options.o
 	$(CC) $^ -o $@ $(LDFLAGS)
 
