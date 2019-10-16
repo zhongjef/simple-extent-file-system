@@ -10,7 +10,7 @@ Questions:
 
     4. (Fixed) Should we really set a1fs_extent.start's type to a1fs_blk_t?
         - The a1fs_extent.start is actually not a pointer to block
-          but a block number of the block containing the extent. 
+          but a block number of the block containing the extent.
 
 Notes:
 
@@ -38,12 +38,20 @@ Notes:
            long   tv_nsec;               /* Nanoseconds */
         };
 
+    - How to read all dentry under an inode?
+    1. Go to the first extent
+    2. Interate through the directory entries using dentry_count
+    3. If there are still some extent left go to 4
+    4. go to the next extent block
+    5. repeat 2 to 5 until all entries are iterated
+
 Todos:
     - a1fs.c:
-        - ( ) Extend step 2 in a1fs_getattr
+        - ( ) Extend step 2 in get_ino_num_by_path
         - ( ) Fill in st->st_mode in a1fs_getattr
     - mkfs.c:
         - (Done) Write bit to bit
             - Reason: asicii code for '0' is 48, thus writing '0' to disk does not work
         - (Done) Initialize the extent for root inode and root directory
-            - ( ) But shouldnt root node go with empty extent at initialization?
+            - (Done) But shouldnt root node go with empty extent at initialization?
+                - Answer: No, each root inode on intiailization would need at least one extent for the two entry for "." and "..".
