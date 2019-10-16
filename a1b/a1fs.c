@@ -90,6 +90,73 @@ static fs_ctx *get_fs(void)
 	return (fs_ctx*)fuse_get_context()->private_data;
 }
 
+/**
+ * Get inode number by absolute path.
+ * 
+ * Errors:
+ *   ENAMETOOLONG  the path or one of its components is too long.
+ *   ENOENT        a component of the path does not exist.
+ *   ENOTDIR       a component of the path prefix is not a directory.
+ * 
+ * @param path  path to any file in the file syste.
+ * @return      0 on success; -errno on error;   
+ */
+a1fs_ino_t get_ino_num_by_path(const char *path) {
+	
+	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
+	// get the address to the beginning of file system
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_superblock *sb = image;
+	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	
+	// TODO: For Step 2, we initially assume that dentry_count is small enough
+	// 		 so that all dentry are stored in one block, but we actually would
+	//       have to look into other blocks within the same extent, or even
+	//       other extents.
+
+	a1fs_ino_t curr_ino_t = 0;
+	a1fs_inode *curr_inode;
+	a1fs_extent *curr_extent;
+	a1fs_dentry *curr_dir;
+	uint32_t dentry_count;
+	char foundPathCompo;
+	a1fs_dentry *curr_dentry;
+
+	// make of a copy to the path, since strtok is destructive
+	char cpy_path[strlen(path) + 1];
+	strcpy(cpy_path, path);
+	char delim[] = "/";
+	// Use strtok to get each path compoenent
+	char *pathComponent = strtok(cpy_path, delim);
+	// Using do-while loop since curr_inode would be root inode initially, thus
+	// iterating at least once.
+	do {  // Iterate to the inode given by absolute path
+		curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
+		if (curr_inode->mode == 'd')
+			return -ENOTDIR;
+		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
+		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+		dentry_count = curr_inode->dentry_count;
+		
+		foundPathCompo = 0;
+		for (uint32_t i = 0; i < dentry_count; i++)
+		{
+			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
+			if (strcmp(curr_dentry->name, pathComponent) == 0)
+			{
+				foundPathCompo = 1;
+				curr_ino_t = curr_dentry->ino;
+				break;
+			}
+		}
+		if (!foundPathCompo)
+			return -ENOENT;
+		pathComponent = strtok(NULL, delim);
+	} while (pathComponent != NULL);
+
+	return curr_ino_t;
+}
 
 /**
  * Get file system statistics.
@@ -141,77 +208,34 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
  */
 static int a1fs_getattr(const char *path, struct stat *st)
 {
-	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
-	fs_ctx *fs = get_fs();
-	void *image = fs->image;
-
 	memset(st, 0, sizeof(*st));
+	fs_ctx *fs = get_fs();
+	// NOTE: This is just a placeholder that allows the file system to be mounted
+	// without errors. You should remove this from your implementation.
+	// get the address to the beginning of file system
+	if (strcmp(path, "/") == 0) {
+		st->st_mode = S_IFDIR | 0777;
+		return 0;
+	}
+	(void)fs;
+	return -ENOSYS;
 
-	// //NOTE: This is just a placeholder that allows the file system to be mounted
-	// // without errors. You should remove this from your implementation.
-	// if (strcmp(path, "/") == 0) {
-	// 	st->st_mode = S_IFDIR | 0777;
-	// 	return 0;
-	// }
+	// void *image = fs->image;
+	// a1fs_superblock *sb = image;
+	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	// a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
+	// printf("%d", curr_ino_t);
+	// a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
+	// // TODO what should I put here for st_mode?
+	// st->st_mode = curr_inode->mode;
+	// st->st_nlink = (nlink_t)(curr_inode->links);
+	// blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
+	// if (curr_inode->size % 512 != 0)
+	// 	sectors_used++;
+	// st->st_blocks = sectors_used;
+	// st->st_mtime = curr_inode->mtime.tv_sec;
+	// return 0;
 
-	// Use the copied path to parse into each path compoenent
-	char cpy_path[strlen(path) + 1];
-	strcpy(cpy_path, path);
-	char delim[] = "/";
-	char *pathComponent = strtok(cpy_path, delim);
-
-	a1fs_superblock *sb = image;
-	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
-
-	// TODO: For Step 2, we initially assume that dentry_count is small enough
-	// 		 so that all dentry are stored in one block, but we actually would
-	//       have to look into other blocks within the same extent, or even
-	//       other extents.
-
-	a1fs_inode *curr_inode = (a1fs_inode *) inode_table;
-	a1fs_extent *curr_extent;
-	a1fs_dentry *curr_dir;
-	uint32_t dentry_count;
-	// Using do-while loop since curr_inode would be root inode initially, thus
-	// iterating at least once.
-	do {  // Iterate to the inode given by absolute path
-		if (curr_inode->mode != 'd')
-			return -ENOTDIR;
-		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
-		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
-		dentry_count = curr_inode->dentry_count;
-		
-		char foundPathCompo = 0;
-		a1fs_dentry *curr_dentry;
-		for (uint32_t i = 0; i < dentry_count; i++)
-		{
-			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
-			if (strcmp(curr_dentry->name, pathComponent) == 0)
-			{
-				foundPathCompo = 1;
-				a1fs_ino_t next_ino_num = curr_dentry->ino;
-				curr_inode = inode_table + (sizeof(a1fs_inode) * next_ino_num);
-				break;
-			}
-		}
-		if (!foundPathCompo)
-			return -ENOENT;
-		pathComponent = strtok(NULL, delim);
-	} while (pathComponent != NULL);
-
-	// TODO what should I put here for st_mode?
-	st->st_mode = curr_inode->mode;
-	st->st_nlink = (nlink_t)(curr_inode->links);
-	blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
-	if (curr_inode->size % 512 != 0)
-		sectors_used++;
-	st->st_blocks = sectors_used;
-	st->st_mtime = curr_inode->mtime.tv_sec;
-
-	return 0;
-
-	// (void)fs;
-	// return -ENOSYS;
 }
 
 /**
@@ -249,9 +273,10 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		return 0;
 	}
 
-	//TODO
+	// //TODO
 	(void)fs;
 	return -ENOSYS;
+	return 0;
 }
 
 
