@@ -96,16 +96,16 @@ int main(int argc, char **argv)
     a1fs_inode *inode;
     for (int bit = 0; bit < sb->s_inodes_count; bit++)
     {
-        if((inode_bitmap[bit] & (1 << bit)) > 0){  // bit map is 1
+        if((inode_bitmap[bit] & (1 << bit)) == 1){  // bit map is 1
             inode = (void *)(inode_block + bit* sizeof(a1fs_inode));
             // bitmap count starts form 0
             printf("Inode: Inode#: %d\n Number of Link: %d\n Extend Block: %d\n Mode: %c\n Dentry: %ld\n", bit, inode->links, inode->extentcount, inode->mode, inode->dentry_count);
         }
     }
     printf("\n");
-
-
-
-
+	printf("d entry: ");
+	a1fs_dentry *dentry = (a1fs_dentry *)(disk + (sb->bg_data_block + 1)* A1FS_BLOCK_SIZE);
+	printf("d entry name: %s", dentry->name);
+	printf("d endasdas");
     return 0;
 }

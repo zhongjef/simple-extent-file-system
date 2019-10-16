@@ -43,6 +43,7 @@
 // FUSE callbacks as "/dir".
 
 
+
 /**
  * Initialize the file system.
  *
@@ -88,6 +89,13 @@ static void a1fs_destroy(void *ctx)
 static fs_ctx *get_fs(void)
 {
 	return (fs_ctx*)fuse_get_context()->private_data;
+}
+
+
+//Helper functions
+void setBitOn(unsigned char *A, uint32_t i) {
+	int char_bits = sizeof(unsigned char) * 8;
+	A[i/char_bits] |= 1 << (i%char_bits);
 }
 
 /**
@@ -307,10 +315,54 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	fs_ctx *fs = get_fs();
 
 	//TODO
-	(void)path;
+	void *image = fs->image;
+	a1fs_superblock *sb = image;
+	//if there is no free inode available, return ENOSPC
+	if (sb->s_free_inodes_count < 1) {
+		return -ENOSPC;
+	}
+	unsigned char *inode_bitmap = (unsigned char *)(image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
+	void *inode_block = (void *)(image + (sb->bg_inode_table)* A1FS_BLOCK_SIZE);
+	a1fs_inode *new_inode;
+	a1fs_ino_t inode_num;
+	// loop inode bitmap to find an empty spot
+    	for (unsigned int bit = 0; bit < sb->s_inodes_count; bit++)
+    	{
+        	if((inode_bitmap[bit] & (1 << bit)) == 0){  // bit map is 0
+			// create a new inode
+            		new_inode = (void *)(inode_block + bit * sizeof(a1fs_inode));
+			setBitOn(inode_bitmap, bit);
+			inode_num = bit;
+			break;
+        	}
+    	}
+	// file mode??
+	new_inode->mode = 'd';
+	new_inode->links = 0;
+	new_inode->size = 0;
+	new_inode->dentry_count = 0;
+	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
+	// get parent directory inode, and modify its info
+	a1fs_ino_t parent_directory_ino_num = get_ino_num_by_path(path);
+	a1fs_inode *parent_directory_ino = (a1fs_inode *)(inode_block + parent_directory_ino_num * sizeof(a1fs_inode));
+	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
+	uint64_t dir_count = parent_directory_ino->dentry_count;
+	parent_directory_ino->dentry_count++;
+	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*new_inode->extentblock);
+	// let new directory entry point to the last spot in block
+	a1fs_dentry *new_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * extentblock->start + sizeof(a1fs_dentry) * dir_count);
+	//uint64_t i = 0;
+	// search for a free directory by checking if the ino == -1
+	//while (i < dir_count){
+		//a1fs_dentry *cur_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * extentblock->start + sizeof(a1fs_dentry) * i);
+		//if (cur_dir->ino == -1){
+			//new_dir = cur_dir;
+		//}
+		//i++;
+	//}
+	new_dir->ino = inode_num;
 	(void)mode;
-	(void)fs;
-	return -ENOSYS;
+	return 0;
 }
 
 /**
