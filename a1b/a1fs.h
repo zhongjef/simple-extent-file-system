@@ -93,8 +93,8 @@ typedef struct a1fs_superblock {
 	uint64_t size;
 
 	unsigned int   s_inodes_count;      /* Inodes count */
-	unsigned int   s_blocks_count;      /* Data Blocks count */
-	unsigned int   s_free_blocks_count; /* Free blocks count */
+	unsigned int   s_blocks_count;      /* Blocks count */
+	unsigned int   s_free_blocks_count; /* Free data blocks count */
 	unsigned int   s_free_inodes_count; /* Free inodes count */
 	a1fs_blk_t     bg_block_bitmap;     /* Data block bitmap block number*/
 	unsigned int   block_bitmap_count;	/* Data block bitmap block count */

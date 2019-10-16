@@ -14,7 +14,13 @@
 
 // Pointer to the 0th byte of the disk
 unsigned char *disk;
-
+int ceil_divide(int x, int y) {	
+	int result = x / y;
+	if(x % y != 0){
+		result += 1;
+	}
+	return result;	
+}
 int main(int argc, char **argv)
 {
 
@@ -44,28 +50,22 @@ int main(int argc, char **argv)
 
     // in byte
     printf("Size: %d\n", (int)sb->size);
-
-    printf("    Address:\n");
-    printf("    First Inode Bitmap: %d\n", sb->first_ib);
-    printf("    First Data Bitmap: %d\n", sb->first_db);
-    printf("    First Inode: %d\n", sb->first_inode);
-    printf("    First Data Block: %d\n", sb->first_data);
-
-    printf("\n");
-
-    printf("    Amounts:\n");
-    printf("    Number of Inodes: %d\n", sb->inode_count);
-    printf("    Number of Inode Bitmap blocks: %d\n", sb->ib_count);
-    printf("    Number of Data Bitmap blocks: %d\n", sb->db_count);
-    printf("    Number of inode Blocks: %d\n", sb->iblock_count);
-    printf("    Number of free inode block: %d\n", sb->free_iblock_count);
-    printf("    Number of data Blocks: %d\n", sb->dblock_count);
-    printf("    Number of free data block: %d\n", sb->free_dblock_count);
-
+    	printf("    Inode count: %d\n", sb->s_inodes_count);
+	printf("    Blocks count: %d\n", sb->s_blocks_count);
+	printf("    Free blocks count: %d\n", sb->s_free_blocks_count);
+	printf("    Free inodes count: %d\n", sb->s_free_inodes_count);
+	printf("    block bitmap: %d\n", sb->bg_block_bitmap);
+	printf("    block bitmap count: %d\n", sb->block_bitmap_count);
+	printf("    inode bitmap: %d\n", sb->bg_inode_bitmap);
+	printf("    inode bitmap count: %d\n", sb->inode_bitmap_count);
+	printf("    inode table: %d\n", sb->bg_inode_table);
+	printf("    inode table count: %d\n", sb->inode_table_count);
+	printf("    data block: %d\n", sb->bg_data_block);
+	printf("    data block count: %d\n", sb->data_block_count);
     // Print Inode Bitmap
     printf("Inode bitmap: ");
-    unsigned char *inode_bitmap = (unsigned char *)(disk + sb->first_ib * A1FS_BLOCK_SIZE);
-    for (int bit = 0; bit <= sb->inode_count; bit++)
+    unsigned char *inode_bitmap = (unsigned char *)(disk + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
+    for (int bit = 0; bit <= sb->s_inodes_count; bit++)
     {
         printf("%d", (inode_bitmap[bit] & (1 << bit)) > 0);
         if (bit != 0 && bit % 5 == 0)
@@ -77,8 +77,8 @@ int main(int argc, char **argv)
 
     // Print Block Bitmap
     printf("Block bitmap: ");
-    unsigned char *block_bitmap = (unsigned char *)(disk + sb->first_db * A1FS_BLOCK_SIZE);
-    for (int bit = 0; bit <= sb->dblock_count; bit++)
+    unsigned char *block_bitmap = (unsigned char *)(disk + A1FS_BLOCK_SIZE);
+    for (int bit = 0; bit <= sb->data_block_count; bit++)
     {
         printf("%d", (block_bitmap[bit] & (1 << bit)) > 0);
         if (bit != 0 && bit % 5 == 0)
@@ -89,15 +89,14 @@ int main(int argc, char **argv)
     printf("\n");
 
     // Print Inode
-    printf("Inode bitmap: ");
-    void *inode_block = (void *)(disk + sb->first_inode*A1FS_BLOCK_SIZE);
+    void *inode_block = (void *)(disk + (sb->bg_inode_table)* A1FS_BLOCK_SIZE);
     a1fs_inode *inode;
-    for (int bit = 0; bit < sb->inode_count; bit++)
+    for (int bit = 0; bit < sb->s_inodes_count; bit++)
     {
         if((inode_bitmap[bit] & (1 << bit)) > 0){  // bit map is 1
-            inode = (void *)(inode_block + bit* sizeof((a1fs_inode)));
+            inode = (void *)(inode_block + bit* sizeof(a1fs_inode));
             // bitmap count starts form 0
-            printf("Inode: Inode#: %d Number of Link: %d\n Extend Block: %d\n", bit, inode->links, inode->ext_block);
+            printf("Inode: Inode#: %d\n Number of Link: %d\n Extend Block: %d\n Mode: %d\n Dentry: %ld\n", bit, inode->links, inode->extentcount, inode->mode, inode->dentry_count);
         }
     }
     printf("\n");
