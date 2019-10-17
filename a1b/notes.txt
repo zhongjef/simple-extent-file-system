@@ -6,7 +6,8 @@ Questions:
     2. (Fixed) For a1fs_getattr(), what if the path name is root?
         - Use a do while loop to deal with the root inode first.
 
-    3. ( ) How should we fill in st->st_mode in a1fs_getattr?
+    3. (Fixed) How should we fill in st->st_mode in a1fs_getattr?
+        - Since we dont care about permission in A1, just 'd' & 'f' is enough, or we could just set give every permission like rwxrwxrwx.
 
     4. (Fixed) Should we really set a1fs_extent.start's type to a1fs_blk_t?
         - The a1fs_extent.start is actually not a pointer to block
@@ -16,7 +17,7 @@ Questions:
         - Each inode would have to be intialized with a extent block to store . and .. directory.
         - Answer:
             - Yes it is possible to allocate inode at run time since the super block keeps track of free inodes count.
-
+#!/bin/bash shebang line   setup compiler   default is ./bin/bash
 Notes:
 
     - Only implement these for struct stat
@@ -53,11 +54,15 @@ Notes:
     - How to find pid for a process?
         - use pidof <process>, e.g. pidof firefox
     
+    - Does creat() create hardlink?
+        - yes
 
+    - Are . and .. hard links?
+        -yes
 Todos:
     - a1fs.c:
         - ( ) Extend step 2 in get_ino_num_by_path
-        - ( ) Fill in st->st_mode in a1fs_getattr
+        - (Done) Fill in st->st_mode in a1fs_getattr
     - mkfs.c:
         - (Done) Write bit to bit
             - Reason: asicii code for '0' is 48, thus writing '0' to disk does not work
