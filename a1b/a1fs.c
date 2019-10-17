@@ -329,7 +329,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 		return -ENOSPC;
 	}
 	unsigned char *inode_bitmap = (unsigned char *)(image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
-	void *inode_block = (void *)(image + (sb->bg_inode_table)* A1FS_BLOCK_SIZE);
+	void *inode_block = (void *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE);
 	a1fs_inode *new_inode;
 	a1fs_ino_t inode_num;
 	// loop inode bitmap to find an empty spot
@@ -339,7 +339,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 			// create a new inode
             		new_inode = (void *)(inode_block + bit * sizeof(a1fs_inode));
 			setBitOn(inode_bitmap, bit);
-			inode_num = bit;
+			inode_num = bit + 1; // the inode number stored in d entry always + 1, so inode number 0 represents free d entry
 			break;
         	}
     	}
@@ -349,8 +349,15 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	new_inode->size = 0;
 	new_inode->dentry_count = 0;
 	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
+	// cut the last component which is the directory name we want to create
+	char cpy_path[strlen(path) + 1];
+	strcpy(cpy_path, path);
+	char *ptr = strrchr(cpy_path, '/');
+	if (ptr != NULL){
+		*ptr = '\0';
+	}
 	// get parent directory inode, and modify its info
-	a1fs_ino_t parent_directory_ino_num = get_ino_num_by_path(path);
+	a1fs_ino_t parent_directory_ino_num = get_ino_num_by_path(cpy_path);
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(inode_block + parent_directory_ino_num * sizeof(a1fs_inode));
 	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
 	uint64_t dir_count = parent_directory_ino->dentry_count;
@@ -358,16 +365,24 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*new_inode->extentblock);
 	// let new directory entry point to the last spot in block
 	a1fs_dentry *new_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * extentblock->start + sizeof(a1fs_dentry) * dir_count);
-	//uint64_t i = 0;
-	// search for a free directory by checking if the ino == -1
-	//while (i < dir_count){
-		//a1fs_dentry *cur_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * extentblock->start + sizeof(a1fs_dentry) * i);
-		//if (cur_dir->ino == -1){
-			//new_dir = cur_dir;
-		//}
-		//i++;
-	//}
+	uint64_t i = 0;
+	// search for a free directory by checking if the ino == 0
+	while (i < dir_count){
+		a1fs_dentry *cur_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * extentblock->start + sizeof(a1fs_dentry) * i);
+		if (cur_dir->ino == 0){
+			new_dir = cur_dir;
+		}
+		i++;
+	}
 	new_dir->ino = inode_num;
+	// get the directory name we want to create
+	char * dir_name;
+	char cpy_path1[strlen(path) + 1];
+	strcpy(cpy_path1, path);
+	int delim = '/';
+	dir_name = strrchr(path, delim);
+	dir_name++;
+	strcpy(new_dir->name, dir_name);
 	(void)mode;
 	return 0;
 }

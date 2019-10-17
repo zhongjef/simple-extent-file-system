@@ -205,7 +205,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	curr_extent->count = 1;
 	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
 	root_inode->dentry_count += 2;
-	curr_dir->ino = 0;
+	curr_dir->ino = 1;
 	strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
 	return true; 
 }
