@@ -232,7 +232,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	a1fs_superblock *sb = image;
 	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
 	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
-	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
+	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
 	// TODO what should I put here for st_mode?
 	st->st_mode = curr_inode->mode;
 	st->st_nlink = (nlink_t)(curr_inode->links);
