@@ -163,7 +163,7 @@ long get_ino_num_by_path(const char *path) {
 		foundPathCompo = 0;
 		for (uint64_t i = 0; i < dentry_count; i++) {
 			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
-			if (strncmp(curr_dentry->name, pathComponent) == 0) {
+			if (strcmp(curr_dentry->name, pathComponent) == 0) { // At root inode what if path component is NULL
 				foundPathCompo = 1;
 				curr_ino_t = curr_dentry->ino;
 				break;
