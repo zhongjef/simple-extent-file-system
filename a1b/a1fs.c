@@ -221,28 +221,27 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	// NOTE: This is just a placeholder that allows the file system to be mounted
 	// without errors. You should remove this from your implementation.
 	// get the address to the beginning of file system
-	if (strcmp(path, "/") == 0) {
-		st->st_mode = S_IFDIR | 0777;
-		return 0;
-	}
-	(void)fs;
-	return -ENOSYS;
+	// if (strcmp(path, "/") == 0) {
+	// 	st->st_mode = S_IFDIR | 0777;
+	// 	return 0;
+	// }
+	// (void)fs;
+	// return -ENOSYS;
 
-	// void *image = fs->image;
-	// a1fs_superblock *sb = image;
-	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
-	// a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
-	// printf("%d", curr_ino_t);
-	// a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
-	// // TODO what should I put here for st_mode?
-	// st->st_mode = curr_inode->mode;
-	// st->st_nlink = (nlink_t)(curr_inode->links);
-	// blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
-	// if (curr_inode->size % 512 != 0)
-	// 	sectors_used++;
-	// st->st_blocks = sectors_used;
-	// st->st_mtime = curr_inode->mtime.tv_sec;
-	// return 0;
+	void *image = fs->image;
+	a1fs_superblock *sb = image;
+	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
+	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
+	// TODO what should I put here for st_mode?
+	st->st_mode = curr_inode->mode;
+	st->st_nlink = (nlink_t)(curr_inode->links);
+	blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
+	if (curr_inode->size % 512 != 0)
+		sectors_used++;
+	st->st_blocks = sectors_used;
+	st->st_mtime = curr_inode->mtime.tv_sec;
+	return 0;
 
 }
 
@@ -275,15 +274,23 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	//NOTE: This is just a placeholder that allows the file system to be mounted
 	// without errors. You should remove this from your implementation.
-	if (strcmp(path, "/") == 0) {
-		filler(buf, "." , NULL, 0);
-		filler(buf, "..", NULL, 0);
-		return 0;
+	// if (strcmp(path, "/") == 0) {
+	// 	filler(buf, "." , NULL, 0);
+	// 	filler(buf, "..", NULL, 0);
+	// 	return 0;
+	// }
+	// (void)fs;
+	// return -ENOSYS;
+	void *image = fs->image;
+	a1fs_superblock *sb = image;
+	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
+	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*curr_ino_t);
+	a1fs_extent *curr_extent = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
+	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + curr_extent->start);
+	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
+		filler(buf, curr_dir[i].name, NULL, 0);
 	}
-
-	// //TODO
-	(void)fs;
-	return -ENOSYS;
 	return 0;
 }
 
@@ -306,7 +313,7 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  *   ENOMEM  not enough memory (e.g. a malloc() call failed).
  *   ENOSPC  not enough free space in the file system.
  *
- * @param path  path to the directory to create.
+ * @param path  path to the directory to create.  /local/kkk/mydir
  * @param mode  file mode bits.
  * @return      0 on success; -errno on error.
  */
