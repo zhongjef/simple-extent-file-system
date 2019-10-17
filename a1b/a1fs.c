@@ -107,63 +107,82 @@ void setBitOn(unsigned char *A, uint32_t i) {
  *   ENOTDIR       a component of the path prefix is not a directory.
  * 
  * @param path  path to any file in the file syste.
- * @return      0 on success; -errno on error;   
+ * @return      0 on success; -errno on error;
  */
-a1fs_ino_t get_ino_num_by_path(const char *path) {
+long get_ino_num_by_path(const char *path) {
 	
-	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
+	if (strlen(path) >= A1FS_PATH_MAX) {
+		printf("ENAMETOOLONG\n");
+		return -ENAMETOOLONG;
+	}
+	// path is just "/"
+	if (strlen(path) == 1) {
+		// Root inode number is 1
+		return 1;	
+	}
+	// Continuing from here, path = "/..."
+
 	// get the address to the beginning of file system
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	a1fs_superblock *sb = image;
-	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
+	a1fs_superblock *sb          = image;
+	a1fs_inode      *inode_table = (a1fs_inode *) (image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
 	
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
 	//       have to look into other blocks within the same extent, or even
 	//       other extents.
 
-	a1fs_ino_t curr_ino_t = 0;
-	a1fs_inode *curr_inode;
+	// Start with the Root inode
+	a1fs_ino_t  curr_ino_t = 1;
+	a1fs_inode  *curr_inode;
 	a1fs_extent *curr_extent;
 	a1fs_dentry *curr_dir;
-	uint32_t dentry_count;
-	char foundPathCompo;
+	uint64_t    dentry_count;
+	int        foundPathCompo;
 	a1fs_dentry *curr_dentry;
 
-	// make of a copy to the path, since strtok is destructive
+	// Make of a copy to the path, since strtok is destructive
 	char cpy_path[strlen(path) + 1];
 	strcpy(cpy_path, path);
 	char delim[] = "/";
-	// Use strtok to get each path compoenent
-	char *pathComponent = strtok(cpy_path, delim);
+	char *pathComponent = pathComponent = strtok(cpy_path, delim);
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
-	do {  // Iterate to the inode given by absolute path
-		curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
-		if (curr_inode->mode == 'd')
-			return -ENOTDIR;
-		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
-		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+	do {
+		curr_inode = (a1fs_inode *) (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
+		// If the path component is not a dir, but we still have some more path components to parse
+		if (curr_inode->mode != 'd') {
+				printf("ENOTDIR\n");
+				return -ENOTDIR;
+		}
+		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
+		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 		dentry_count = curr_inode->dentry_count;
 		
 		foundPathCompo = 0;
-		for (uint32_t i = 0; i < dentry_count; i++)
-		{
+		for (uint64_t i = 0; i < dentry_count; i++) {
 			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
-			if (strcmp(curr_dentry->name, pathComponent) == 0)
-			{
+			if (strncmp(curr_dentry->name, pathComponent) == 0) {
 				foundPathCompo = 1;
 				curr_ino_t = curr_dentry->ino;
 				break;
 			}
 		}
-		if (!foundPathCompo)
+		if (!foundPathCompo) {
+			printf("Path is --%s--\n", path);
+			printf("Path %d \"/\"\n", strcmp(path, "/"));
+			printf("PathCompo is %s\n", pathComponent);
+			printf("dentry_count is %ld\n", dentry_count);
+			printf("ENOENT\n");
 			return -ENOENT;
+		}
+
 		pathComponent = strtok(NULL, delim);
+		
 	} while (pathComponent != NULL);
 
-	return curr_ino_t;
+	return (long) curr_ino_t;
 }
 
 /**
@@ -230,8 +249,13 @@ static int a1fs_getattr(const char *path, struct stat *st)
 
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
-	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
-	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
+	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
+	if (get_ino_num_by_path(path) < 0) {
+		fprintf(stderr, "get_attr ERRROR\n");
+		return get_ino_num_by_path(path);
+	}
+	a1fs_ino_t curr_ino_t = (a1fs_ino_t) get_ino_num_by_path(path);
+
 	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
 	// TODO what should I put here for st_mode?
 	st->st_mode = curr_inode->mode;
@@ -268,6 +292,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                         off_t offset, struct fuse_file_info *fi)
 {
+	printf("\nEntered into readdir\n");
 	(void)offset;// unused
 	(void)fi;// unused
 	fs_ctx *fs = get_fs();
@@ -284,7 +309,12 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
 	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
-	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
+	
+	if (get_ino_num_by_path(path) < 0) {
+		fprintf(stderr, "read_dirERORORROORORORORR\n");
+		return get_ino_num_by_path(path);
+	}
+	a1fs_ino_t curr_ino_t = (long) get_ino_num_by_path(path);
 	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
 	a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
 	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + curr_extent->start);
@@ -319,6 +349,7 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  */
 static int a1fs_mkdir(const char *path, mode_t mode)
 {
+	printf("\nEntered into mkdir\n");
 	fs_ctx *fs = get_fs();
 
 	//TODO
@@ -336,10 +367,10 @@ static int a1fs_mkdir(const char *path, mode_t mode)
     	for (unsigned int bit = 0; bit < sb->s_inodes_count; bit++)
     	{
         	if((inode_bitmap[bit] & (1 << bit)) == 0){  // bit map is 0
-			// create a new inode
-            		new_inode = (void *)(inode_block + bit * sizeof(a1fs_inode));
-			setBitOn(inode_bitmap, bit);
-			inode_num = bit + 1; // the inode number stored in d entry always + 1, so inode number 0 represents free d entry
+				// create a new inode
+				new_inode = (void *)(inode_block + bit * sizeof(a1fs_inode));
+				setBitOn(inode_bitmap, bit);
+				inode_num = bit + 1; // the inode number stored in d entry always + 1, so inode number 0 represents free d entry
 			break;
         	}
     	}
@@ -357,7 +388,11 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 		*ptr = '\0';
 	}
 	// get parent directory inode, and modify its info
-	a1fs_ino_t parent_directory_ino_num = get_ino_num_by_path(cpy_path);
+	if (get_ino_num_by_path(cpy_path) < 0) {
+		fprintf(stderr, "Mkdir ERRORRRRRRRRR\n");
+		return get_ino_num_by_path(cpy_path);
+	}
+	a1fs_ino_t parent_directory_ino_num = (long) get_ino_num_by_path(cpy_path);
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(inode_block + parent_directory_ino_num * sizeof(a1fs_inode));
 	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
 	uint64_t dir_count = parent_directory_ino->dentry_count;
