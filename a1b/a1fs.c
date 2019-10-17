@@ -286,7 +286,7 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*sb->bg_inode_table);
 	a1fs_ino_t curr_ino_t = get_ino_num_by_path(path);
 	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
-	a1fs_extent *curr_extent = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
+	a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*curr_inode->extentblock);
 	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + curr_extent->start);
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
 		filler(buf, curr_dir[i].name, NULL, 0);
