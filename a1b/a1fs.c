@@ -115,11 +115,16 @@ long get_ino_num_by_path(const char *path) {
 		printf("ENAMETOOLONG\n");
 		return -ENAMETOOLONG;
 	}
+
+	printf("The path length is %ld\n", strlen(path));
+	printf("The path is:%s\n", path);
+
 	// path is just "/"
-	if (strlen(path) == 1) {
+	if (strcmp(path, "/") == 0 || path[1] == '.') {
 		// Root inode number is 1
 		return 1;	
 	}
+
 	// Continuing from here, path = "/..."
 
 	// get the address to the beginning of file system
@@ -160,6 +165,7 @@ long get_ino_num_by_path(const char *path) {
 		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 		dentry_count = curr_inode->dentry_count;
 		
+		// Search in the current inode 's directory entries to find the next path component
 		foundPathCompo = 0;
 		for (uint64_t i = 0; i < dentry_count; i++) {
 			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
@@ -250,6 +256,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
 	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
+	printf("GETATTR Path passed is: %s", path);
 	if (get_ino_num_by_path(path) < 0) {
 		fprintf(stderr, "get_attr ERRROR\n");
 		return get_ino_num_by_path(path);
