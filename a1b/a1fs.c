@@ -309,8 +309,8 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	//NOTE: This is just a placeholder that allows the file system to be mounted
 	// without errors. You should remove this from your implementation.
 	// if (strcmp(path, "/") == 0) {
-	// 	filler(buf, "." , NULL, 0);
-	// 	filler(buf, "..", NULL, 0);
+		// filler(buf, "." , NULL, 0);
+		// filler(buf, "..", NULL, 0);
 	// 	return 0;
 	// }
 	// (void)fs;
@@ -327,6 +327,8 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_num - 1));
 	a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
 	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
+	filler(buf, ",", NULL, 1);
+	filler(buf, "..", NULL, 1);
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
 		filler(buf, (curr_dir[i]).name, NULL, 0);
 	}
