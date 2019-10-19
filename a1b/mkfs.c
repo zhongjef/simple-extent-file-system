@@ -146,7 +146,8 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	int num_inode_t = ceil_divide(opts->n_inodes * sizeof(a1fs_inode), A1FS_BLOCK_SIZE);
 	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1;
 	if (used_blocks > num_block || opts->n_inodes < 1) {
-		return false;}
+		return false;
+	}
 	a1fs_superblock * sb = (struct a1fs_superblock *)(image);
 	sb->magic = A1FS_MAGIC;
 	sb->size = size;
@@ -185,7 +186,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	setBitOn(inode_bits, 0);
 	sb->s_free_inodes_count--;
 	a1fs_inode * root_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table));
-	root_inode->mode = 'd';
+	root_inode->mode = __S_IFDIR | 0777;
 	root_inode->links = 0;
 	root_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
@@ -205,11 +206,13 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	curr_extent->count = 1;
 	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
 	root_inode->dentry_count += 1;
+	root_inode->size += sizeof(a1fs_dentry);
 	curr_dir->ino = 1;
 	strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
 
 	curr_dir = curr_dir + sizeof(a1fs_dentry);
 	root_inode->dentry_count += 1;
+	root_inode->size += sizeof(a1fs_dentry);
 	curr_dir->ino = 1;
 	strncat(curr_dir->name, "..", sizeof(curr_dir->name) - strlen("..") - 1); 
 	return true; 
