@@ -121,8 +121,7 @@ static bool a1fs_is_present(void *image)
 	//TODO
 	//If super block is set up, the image has already been formatted into a1fs.
 	struct a1fs_superblock *sb = (struct a1fs_superblock *)(image);
-	if (sb->magic == A1FS_MAGIC){return true;}
-	return false;
+	return sb->magic == A1FS_MAGIC;
 }
 
 
