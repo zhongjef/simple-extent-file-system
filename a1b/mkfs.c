@@ -138,7 +138,6 @@ static bool a1fs_is_present(void *image)
  */
 static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
-	//TODO
 	int num_block = size / A1FS_BLOCK_SIZE;
 	int num_inode_bm = ceil_divide(opts->n_inodes, BITS_PER_BLOCK);
 	int num_data_bm = ceil_divide(num_block, BITS_PER_BLOCK);

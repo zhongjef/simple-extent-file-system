@@ -156,14 +156,19 @@ long get_ino_num_by_path(const char *path) {
 	// iterating at least once.
 	do {
 		curr_inode = (a1fs_inode *) (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
-		// If the path component is not a dir, but we still have some more path components to parse
-		if (curr_inode->mode != 'd') {
+		// If the path prefix is not a dir
+		if ((curr_inode->mode & __S_IFDIR) <= 0) {
 				printf("ENOTDIR\n");
 				return -ENOTDIR;
 		}
+		// The inode is a directory inode, but did not allocate any directory entry
+		dentry_count = curr_inode->dentry_count;
+		if (dentry_count == 0) {
+			return -ENOENT;
+		}
+		// If dentry_count > 0, then the inode must have allocated some block to store the extent
 		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
 		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
-		dentry_count = curr_inode->dentry_count;
 		
 		// Search in the current inode 's directory entries to find the next path component
 		foundPathCompo = 0;
@@ -203,6 +208,7 @@ long get_ino_num_by_path(const char *path) {
  * @param st    pointer to the struct statvfs that receives the result.
  * @return      0 on success; -errno on error.
  */
+
 static int a1fs_statfs(const char *path, struct statvfs *st)
 {
 	(void)path;// unused
@@ -374,8 +380,10 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	char parent_path[strlen(path) + 1];
 	strcpy(parent_path, path);
 	char *ptr = strrchr(parent_path, '/');
-	if (ptr != NULL){
-		*ptr = '\0';
+	if (ptr != parent_path){
+		ptr[0] = '\0';
+	} else {
+		ptr[1] = '\0';
 	}
 	// get parent directory inode, anSd modify its info
 	long parent_directory_ino_num = (long) get_ino_num_by_path(parent_path);
