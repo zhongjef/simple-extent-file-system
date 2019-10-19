@@ -60,25 +60,25 @@ typedef struct a1fs_extent {
 /** a1fs inode. */
 typedef struct a1fs_inode {
 	/** File mode. */
-	mode_t mode;
+	mode_t mode; //4
 	/** Reference count (number of hard links). */
-	uint32_t links;
+	uint32_t links; // 4
 	/** File size in bytes. */
-	uint64_t size;
+	uint64_t size; // 8
 	/**
 	 * Last modification timestamp.
 	 *
 	 * Use the CLOCK_REALTIME clock; see "man 3 clock_gettime". Must be updated
 	 * when the file (or directory) is created, written to, or its size changes.
 	 */
-	struct timespec mtime;
+	struct timespec mtime; // 32
 	//number of extents
-	unsigned short extentcount;
+	unsigned short extentcount; // 4
 	//extent block
-	a1fs_blk_t extentblock;
+	a1fs_blk_t extentblock; // 4
 	//directory entry count
-	uint64_t dentry_count;
-	char padding[10];
+	uint64_t dentry_count; // 8
+	char padding[10]; // 10
 } a1fs_inode;
 
 // A single block must fit an integral number of inodes
