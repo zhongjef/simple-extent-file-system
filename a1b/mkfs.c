@@ -143,7 +143,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	int num_inode_bm = ceil_divide(opts->n_inodes, BITS_PER_BLOCK);
 	int num_data_bm = ceil_divide(num_block, BITS_PER_BLOCK);
 	int num_inode_t = ceil_divide(opts->n_inodes * sizeof(a1fs_inode), A1FS_BLOCK_SIZE);
-	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1;
+	int used_blocks = num_inode_t + num_data_bm + num_inode_bm + 1; // 1 block for superblock
 	if (used_blocks > num_block || opts->n_inodes < 1) {
 		return false;
 	}
@@ -191,29 +191,29 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->dentry_count = 0;
 	// Allocate root inode's extent block
-	unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (sb->bg_block_bitmap));
-	setBitOn(data_bits, 0);
-	root_inode->extentblock = sb->bg_data_block;
-	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*root_inode->extentblock);
-	a1fs_extent *curr_extent = extentblock;
+	// unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (sb->bg_block_bitmap));
+	// setBitOn(data_bits, 0);
+	// root_inode->extentblock = sb->bg_data_block;
+	// a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*root_inode->extentblock);
+	// a1fs_extent *curr_extent = extentblock;
 	
 	// Allocate directory entries for testing purposes
 	// TODO: Root dir should be empty first
-	setBitOn(data_bits, 1);
-	sb->s_free_blocks_count--;
-	curr_extent->start = sb->bg_data_block + 1;
-	curr_extent->count = 1;
-	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
-	root_inode->dentry_count += 1;
-	root_inode->size += sizeof(a1fs_dentry);
-	curr_dir->ino = 1;
-	strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
+	// setBitOn(data_bits, 1);
+	// sb->s_free_blocks_count--;
+	// curr_extent->start = sb->bg_data_block + 1;
+	// curr_extent->count = 1;
+	// a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*curr_extent->start);
+	// root_inode->dentry_count += 1;
+	// root_inode->size += sizeof(a1fs_dentry);
+	// curr_dir->ino = 1;
+	// strncat(curr_dir->name, ".", sizeof(curr_dir->name) - strlen(".") - 1); 
 
-	curr_dir = curr_dir + sizeof(a1fs_dentry);
-	root_inode->dentry_count += 1;
-	root_inode->size += sizeof(a1fs_dentry);
-	curr_dir->ino = 1;
-	strncat(curr_dir->name, "..", sizeof(curr_dir->name) - strlen("..") - 1); 
+	// curr_dir = curr_dir + sizeof(a1fs_dentry);
+	// root_inode->dentry_count += 1;
+	// root_inode->size += sizeof(a1fs_dentry);
+	// curr_dir->ino = 1;
+	// strncat(curr_dir->name, "..", sizeof(curr_dir->name) - strlen("..") - 1); 
 	return true; 
 }
 
