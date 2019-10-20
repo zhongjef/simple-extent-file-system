@@ -185,7 +185,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	sb->s_free_inodes_count--;
 	a1fs_inode * root_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table));
 	root_inode->mode = __S_IFDIR | 0777;
-	root_inode->links = 1;
+	root_inode->links = 2;
 	root_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->dentry_count = 0;

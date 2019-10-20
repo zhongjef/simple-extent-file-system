@@ -281,7 +281,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
-	a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
+	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
 	printf("GETATTR Path passed is: %s\n", path);
 
 	long curr_ino_num = get_ino_num_by_path(path);
@@ -290,8 +290,10 @@ static int a1fs_getattr(const char *path, struct stat *st)
 		return curr_ino_num;
 	}
 	a1fs_ino_t curr_ino_t = (a1fs_ino_t) curr_ino_num;
+	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
+	// a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
 
-	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
+	a1fs_inode *curr_inode = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_t - 1));
 	// TODO what should I put here for st_mode?
 	st->st_mode = curr_inode->mode;
 	st->st_nlink = (nlink_t)(curr_inode->links);
@@ -352,11 +354,12 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	}
 	a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_num - 1));
 	a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
-	a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
+	// a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
-		if ((curr_dir[i]).ino != 0) {
+		a1fs_dentry *curr_dir = (a1fs_dentry *)  (image + A1FS_BLOCK_SIZE*(curr_extent->start) + sizeof(a1fs_dentry) * i);
+		if (curr_dir->ino != 0) {
 			filler(buf, (curr_dir[i]).name, NULL, 0);
 		}
 	}
@@ -511,14 +514,15 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	long free_bit = find_free_entry_of_length_in_bitmap(inode_bitmap, sb->s_inodes_count, 1);
 	// out of inodes to allocate
 	if (free_bit < 0) { return free_bit; }
+	int j = 1;
 	a1fs_inode *inode_table = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE);
-	a1fs_inode *new_inode = inode_table + sizeof(a1fs_inode)*(free_bit);
+	a1fs_inode *new_inode = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (j) * sizeof(a1fs_inode)) ; // == inode_table[1]
 	setBitOn(inode_bitmap, free_bit);
 	a1fs_ino_t new_inode_num = free_bit + 1;
 	(sb->s_free_inodes_count)--;
 	
 	new_inode->mode = (__S_IFDIR | 0777);
-	new_inode->links = 1;
+	new_inode->links = 2;
 	new_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
 	new_inode->extentcount = 0;
