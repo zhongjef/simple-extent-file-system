@@ -57,9 +57,9 @@ int ceil_divide(int x, int y) {
 }
 
 // Set the i-th index of the bitmap to 1
-void setBitOn(unsigned char *A, uint32_t i) {
-	int char_bits = sizeof(unsigned char) * 8;
-	A[i/char_bits] |= 1 << (i%char_bits);
+void setBitOn(uint32_t *A, uint32_t i) {
+	int int_bits = sizeof(uint32_t) * 8;
+	A[i/int_bits] |= 1 << (i%int_bits);
 }
 
 static const char *help_str = "\
@@ -165,7 +165,7 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	int num_int_bits = sizeof(int) * 8;
 	// data block bitmap
 	for (j = 0; j < num_data_bm; j++) {
-		unsigned char *data_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1));
+		uint32_t *data_bits = (uint32_t *) (image + A1FS_BLOCK_SIZE * (j + 1));
 		// Just fill the entire table with 0 bits, who cares overkill lol
 		for (i = 0; i < BITS_PER_BLOCK; i += num_int_bits){
 			*(data_bits + i) = 0; // int 0 = 32 zero bits
@@ -173,19 +173,19 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	}
 	// inode bitmap
 	for (j = 0; j < num_inode_bm; j++) {
-		unsigned char *inode_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (j + 1 + num_data_bm));
+		uint32_t *inode_bits = (uint32_t *) (image + A1FS_BLOCK_SIZE * (j + 1 + num_data_bm));
 		for (i = 0; i < BITS_PER_BLOCK; i += num_int_bits){
 			*(inode_bits + i) = 0;
 		}
 	}
 	
 	// change root inode to '1'
-	unsigned char *inode_bits = (unsigned char *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_bitmap));
+	uint32_t *inode_bits = (uint32_t *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_bitmap));
 	setBitOn(inode_bits, 0);
 	sb->s_free_inodes_count--;
 	a1fs_inode * root_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table));
 	root_inode->mode = __S_IFDIR | 0777;
-	root_inode->links = 0;
+	root_inode->links = 1;
 	root_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->dentry_count = 0;

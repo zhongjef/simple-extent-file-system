@@ -91,11 +91,31 @@ static fs_ctx *get_fs(void)
 	return (fs_ctx*)fuse_get_context()->private_data;
 }
 
+uint32_t ceil_divide(uint32_t x, uint32_t y) {	
+	uint32_t result = x / y;
+	if(x % y != 0){
+		result += 1;
+	}
+	return result;	
+}
 
-//Helper functions
-void setBitOn(unsigned char *A, uint32_t i) {
-	int char_bits = sizeof(unsigned char) * 8;
-	A[i/char_bits] |= 1 << (i%char_bits);
+
+// Turn on the i-th bit in bitmap
+void setBitOn(uint32_t *bm, uint32_t i) {
+	uint32_t int_bits = sizeof(uint32_t) * 8;
+	bm[i/int_bits] |= 1 << (i%int_bits);
+}
+
+// Turn off the i-th bit in bitmap
+void setBitOff(uint32_t *bm, uint32_t i) {
+	uint32_t int_bits = sizeof(uint32_t) * 8;
+	bm[i/int_bits] &= ~(1 << (i%int_bits));
+}
+
+// Check whether the  i-th bit in bitmap is off
+bool is_bit_off(uint32_t *bm, uint32_t i) {
+	uint32_t int_bits = sizeof(uint32_t) * 8;
+	return ( (bm[i/int_bits] & (1 << (i%int_bits))) == 0 );
 }
 
 /**
@@ -336,11 +356,103 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
-		filler(buf, (curr_dir[i]).name, NULL, 0);
+		if (curr_dir[i].ino != 0) {
+			filler(buf, (curr_dir[i]).name, NULL, 0);
+		}
 	}
 	return 0;
 }
 
+/**
+ * Return the index of the first bit of a bit sequence such that
+ * - all bits in the sequence have value of 0
+ * - the sequence is of length len
+ *
+ * NOTE: If len == 1, then it is equivalently searching for a bit of value 0
+ * in the bitmap.
+ *
+ * Errors:
+ *   ENOSPC  no such bit sequence of length len exists
+ *
+ * @param bitmap the bitmap.
+ * @param limit  how many bits to iterate through at total.
+ * @param len    how many consecutive bits 
+ * @return       the first bit of the bit sequence on success; -ENOSPC on error.
+ */
+long find_free_entry_of_length_in_bitmap(uint32_t *bitmap, uint32_t limit, uint32_t len) {
+	for (uint32_t bit = 0; bit < limit; bit++) {
+		// found a bit of value 0
+		if (is_bit_off(bitmap, bit)) {
+			int all_bits_zero = 1;
+			for (uint32_t i = 0; i < len; i++) {
+				if (!is_bit_off(bitmap, bit + i)) {
+					all_bits_zero = 0;
+					break;
+				}
+			}
+			if (all_bits_zero) {
+				return bit;
+			}
+		}
+
+		// The number of unchecked bits are less than len
+		if (limit - bit < len) {
+			return -ENOSPC;
+		}
+	}
+	// Actually hopefully would not ever each here
+	return -ENOSPC;
+}
+
+/**
+ * Allocate a extent block for the inode and modify corresponding metadata
+ */
+int alloc_extent_block(a1fs_inode *ino) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *) image;
+	// no more free data block, return error
+	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
+	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count, 1);
+	if (some_bit_off < 0) { return -ENOSPC; }
+	ino->extentblock = (a1fs_blk_t) sb->bg_data_block + some_bit_off;
+	setBitOn(data_bitmap, some_bit_off);
+	(sb->s_free_blocks_count)--;
+	return 0;
+}
+
+// Allocate an extent according to the size
+int alloc_an_extent_for_size(a1fs_extent *extent, uint64_t size) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *) image;
+	// no more free data block, return error
+	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
+	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
+	uint32_t blocks_needed = ceil_divide(size, A1FS_BLOCK_SIZE);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count, blocks_needed);
+	if (some_bit_off < 0) { return -ENOSPC; }
+	// Step 7 change here
+	for (uint32_t i = 0; i < blocks_needed; i++) {
+		setBitOn(data_bitmap, some_bit_off + i);
+		(sb->s_free_blocks_count)--;
+	}
+
+	extent->start = (a1fs_blk_t)(sb->bg_data_block + some_bit_off);
+	extent->count = blocks_needed;
+	return 0;
+}
+
+// Fill a block with free directories
+void fill_with_dentry(a1fs_blk_t blk_num) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_dentry *curr_dentry = image + A1FS_BLOCK_SIZE * blk_num;
+	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_dentry); i++) {
+		curr_dentry[i].ino = 0;
+	}
+}
 
 /**
  * Create a directory.
@@ -366,10 +478,11 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  */
 static int a1fs_mkdir(const char *path, mode_t mode)
 {
+	// mode unused
+	(void)mode;
 	printf("\nEntered into mkdir\n");
 	fs_ctx *fs = get_fs();
 
-	//TODO
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
 	if (sb->s_free_inodes_count < 1) {
@@ -394,56 +507,71 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	parent_directory_ino_num = (a1fs_ino_t) parent_directory_ino_num;
 
 	//if there is no free inode available, return ENOSPC
-	unsigned char *inode_bitmap = (unsigned char *) (image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
+	uint32_t *inode_bitmap = (uint32_t *) (image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
+	long free_bit = find_free_entry_of_length_in_bitmap(inode_bitmap, sb->s_inodes_count, 1);
+	// out of inodes to allocate
+	if (free_bit < 0) { return free_bit; }
 	a1fs_inode *inode_table = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE);
-	a1fs_ino_t new_inode_num;
-	a1fs_inode *new_inode;
-	// loop inode bitmap to find an empty spot
-	for (uint32_t bit = 0; bit < sb->s_inodes_count; bit++)
-	{
-		if((inode_bitmap[bit] & (1 << bit)) == 0){  // bit map is 0
-			// create a new inode
-			new_inode = (a1fs_inode *)(inode_table + bit * sizeof(a1fs_inode));
-			setBitOn(inode_bitmap, bit);
-			new_inode_num = bit + 1; // the inode number stored in d entry always + 1, so inode number 0 represents free d entry
-		break;
-		}
-	}
+	a1fs_inode *new_inode = inode_table + sizeof(a1fs_inode)*free_bit;
+	setBitOn(inode_bitmap, free_bit);
+	a1fs_ino_t new_inode_num = free_bit + 1;
 	(sb->s_free_inodes_count)--;
+	
 	new_inode->mode = __S_IFDIR | 0777;
-	new_inode->links = 0;
+	new_inode->links = 1;
 	new_inode->size = 0;
-	new_inode->dentry_count = 0;
 	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
+	new_inode->extentcount = 0;
+	new_inode->dentry_count = 0;
 	
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(inode_table + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
 	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
-	uint64_t dir_count = parent_directory_ino->dentry_count;
+	// allocate extent block for the parent_directory_ino if it hasn't allocate any yet
+	// Step 7 extends here
+	if (parent_directory_ino->extentcount == 0) {
+		int ret0 = alloc_extent_block(parent_directory_ino);
+		if (ret0 != 0) { return ret0; };
+		a1fs_extent *new_extent = image + A1FS_BLOCK_SIZE *(parent_directory_ino->extentblock);
+		int ret1 = alloc_an_extent_for_size(new_extent, sizeof(a1fs_dentry));
+		if (ret1 != 0) {return ret1;}
+		(parent_directory_ino->extentcount)++;
+		fill_with_dentry(new_extent->start);
+		parent_directory_ino->dentry_count += A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+	}
+	
+	// allocate a new directory entry
 	(parent_directory_ino->dentry_count)++;
 	(parent_directory_ino->links)++;
 	parent_directory_ino->size += (sizeof(a1fs_dentry));
-	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(new_inode->extentblock));
+	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_directory_ino->extentblock));
 	// let new directory entry point to the last spot in block
-	a1fs_dentry *new_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * (extentblock->start) + sizeof(a1fs_dentry) * dir_count);
-	uint64_t i = 0;
+	a1fs_dentry *new_dir = NULL;
 	// search for a free directory by checking if the ino == 0
-	while (i < dir_count){
-		a1fs_dentry *cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
+	uint64_t i = 0;
+	a1fs_dentry *cur_dir;
+	while (i < parent_directory_ino->dentry_count){
+		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
 		if (cur_dir->ino == 0){
 			new_dir = cur_dir;
 		}
 		i++;
 	}
+
+	// Step 7
+	if (new_dir == NULL) {
+		// Allocate more extent for direcotrys
+		(void) mode;
+	}
+
 	new_dir->ino = new_inode_num;
 	// get the directory name we want to create
-	char * dir_name;
+	char *dir_name;
 	char cpy_path1[strlen(path) + 1];
 	strcpy(cpy_path1, path);
 	int delim = '/';
 	dir_name = strrchr(path, delim);
 	dir_name+=1;
 	strcpy(new_dir->name, dir_name);
-	(void)mode;
 	return 0;
 }
 
