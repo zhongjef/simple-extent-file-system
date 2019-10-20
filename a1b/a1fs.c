@@ -175,7 +175,7 @@ long get_ino_num_by_path(const char *path) {
 	// Using do-while loop since curr_inode would be root inode initially, thus
 	// iterating at least once.
 	do {
-		curr_inode = (a1fs_inode *) (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
+		curr_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_t - 1));
 		// If the path prefix is not a dir
 		if ((curr_inode->mode & __S_IFDIR) <= 0) {
 				printf("ENOTDIR\n");
@@ -188,12 +188,11 @@ long get_ino_num_by_path(const char *path) {
 		}
 		// If dentry_count > 0, then the inode must have allocated some block to store the extent
 		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
-		curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 		
 		// Search in the current inode 's directory entries to find the next path component
 		foundPathCompo = 0;
 		for (uint64_t i = 0; i < dentry_count; i++) {
-			curr_dentry = (a1fs_dentry *)(curr_dir + (sizeof(a1fs_dentry) * i));
+			curr_dentry = (a1fs_dentry *)(image + A1FS_BLOCK_SIZE*(curr_extent->start) + (sizeof(a1fs_dentry) * i));
 			if (strcmp(curr_dentry->name, pathComponent) == 0) { // At root inode what if path component is NULL
 				foundPathCompo = 1;
 				curr_ino_t = curr_dentry->ino;
@@ -528,7 +527,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	new_inode->extentcount = 0;
 	new_inode->dentry_count = 0;
 	
-	a1fs_inode *parent_directory_ino = (a1fs_inode *)(inode_table + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
+	a1fs_inode *parent_directory_ino = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
 	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
 	// allocate extent block for the parent_directory_ino if it hasn't allocate any yet
 	// Step 7 extends here
