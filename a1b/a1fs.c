@@ -151,7 +151,6 @@ long get_ino_num_by_path(const char *path) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
 	a1fs_superblock *sb          = image;
-	a1fs_inode      *inode_table = (a1fs_inode *) (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
 	
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
@@ -162,7 +161,6 @@ long get_ino_num_by_path(const char *path) {
 	a1fs_ino_t  curr_ino_t = 1;
 	a1fs_inode  *curr_inode;
 	a1fs_extent *curr_extent;
-	a1fs_dentry *curr_dir;
 	uint64_t    dentry_count;
 	int        foundPathCompo;
 	a1fs_dentry *curr_dentry;
@@ -514,7 +512,6 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	// out of inodes to allocate
 	if (free_bit < 0) { return free_bit; }
 	int j = 1;
-	a1fs_inode *inode_table = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE);
 	a1fs_inode *new_inode = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (j) * sizeof(a1fs_inode)) ; // == inode_table[1]
 	setBitOn(inode_bitmap, free_bit);
 	a1fs_ino_t new_inode_num = free_bit + 1;
