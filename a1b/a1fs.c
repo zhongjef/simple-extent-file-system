@@ -356,7 +356,7 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
-		if (curr_dir[i].ino != 0) {
+		if ((curr_dir[i]).ino != 0) {
 			filler(buf, (curr_dir[i]).name, NULL, 0);
 		}
 	}
@@ -512,12 +512,12 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	// out of inodes to allocate
 	if (free_bit < 0) { return free_bit; }
 	a1fs_inode *inode_table = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE);
-	a1fs_inode *new_inode = inode_table + sizeof(a1fs_inode)*free_bit;
+	a1fs_inode *new_inode = inode_table + sizeof(a1fs_inode)*(free_bit);
 	setBitOn(inode_bitmap, free_bit);
 	a1fs_ino_t new_inode_num = free_bit + 1;
 	(sb->s_free_inodes_count)--;
 	
-	new_inode->mode = __S_IFDIR | 0777;
+	new_inode->mode = (__S_IFDIR | 0777);
 	new_inode->links = 1;
 	new_inode->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
@@ -553,6 +553,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
 		if (cur_dir->ino == 0){
 			new_dir = cur_dir;
+			break;
 		}
 		i++;
 	}
