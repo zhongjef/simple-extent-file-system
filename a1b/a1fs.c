@@ -213,6 +213,22 @@ long get_ino_num_by_path(const char *path) {
 	return (long) curr_ino_t;
 }
 
+// Return the parent directory's inode number
+long get_parent_dir_ino_num_by_path(const char *path) {
+
+	// cut the last component which is the directory name we want to create
+	char parent_path[strlen(path) + 1];
+	strcpy(parent_path, path);
+	char *ptr = strrchr(parent_path, '/');
+	if (ptr != parent_path){
+		ptr[0] = '\0';
+	} else {
+		ptr[1] = '\0';
+	}
+
+	return (long) get_ino_num_by_path(parent_path);
+}
+
 /**
  * Get file system statistics.
  *
@@ -491,17 +507,8 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 		return -ENOSPC;
 	}
 
-	// cut the last component which is the directory name we want to create
-	char parent_path[strlen(path) + 1];
-	strcpy(parent_path, path);
-	char *ptr = strrchr(parent_path, '/');
-	if (ptr != parent_path){
-		ptr[0] = '\0';
-	} else {
-		ptr[1] = '\0';
-	}
-	// get parent directory inode, anSd modify its info
-	long parent_directory_ino_num = (long) get_ino_num_by_path(parent_path);
+	// get parent directory inode number
+	long parent_directory_ino_num = get_parent_dir_ino_num_by_path(path);
 	if (parent_directory_ino_num < 0) {
 		fprintf(stderr, "Mkdir ERRORRRRRRRRR\n");
 		return parent_directory_ino_num;
