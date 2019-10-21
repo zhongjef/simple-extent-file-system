@@ -680,11 +680,27 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	(void)fi;// unused
 	assert(S_ISREG(mode));
 	fs_ctx *fs = get_fs();
+
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *) image;
+	// Insufficent amount of free inode for the new file
+	if (sb->s_free_inodes_count < 1) {
+		return -ENOSPC;
+	}
+
+	long parent_dir_ino_num = get_parent_dir_ino_num_by_path(path);
+	// Error checking
+	if (parent_dir_ino_num < 0) { return (int) parent_dir_ino_num; };
+	a1fs_inode *parent_inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * (sb->bg_inode_table) + sizeof(a1fs_inode) * (parent_dir_ino_num - 1));
 	
-	(void) path;
-	(void)mode;
-	(void)fs;
-	return -ENOSYS;
+	// Init a new inode for the empty file
+	long new_inode_num = init_new_inode(mode);
+	if (new_inode_num < 0) { return new_inode_num; }
+	new_inode_num = (a1fs_ino_t) new_inode_num;
+
+	int ret = add_new_inode_to_parent_dir(path, parent_inode, new_inode_num);
+	if (ret != 0) { return ret; }	
+	return 0;
 }
 
 /**
@@ -754,12 +770,14 @@ static int a1fs_rename(const char *from, const char *to)
 static int a1fs_utimens(const char *path, const struct timespec tv[2])
 {
 	fs_ctx *fs = get_fs();
-
-	//TODO
-	(void)path;
-	(void)tv;
-	(void)fs;
-	return -ENOSYS;
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *)image;
+	
+	a1fs_ino_t ino_num = get_ino_num_by_path(path);
+	a1fs_inode *inode = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * (ino_num - 1));
+	inode->mtime.tv_sec = tv[1].tv_sec;
+	inode->mtime.tv_nsec = tv[1].tv_nsec;
+	return 0;
 }
 
 /**
