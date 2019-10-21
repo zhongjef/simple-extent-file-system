@@ -669,7 +669,7 @@ int check_dir_empty(const char *path) {
 static int a1fs_rmdir(const char *path)
 {
 	fs_ctx *fs = get_fs();
-	
+	printf("\nEntered into rmdir\n");
 	//TODO
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
@@ -686,9 +686,12 @@ static int a1fs_rmdir(const char *path)
 		a1fs_blk_t dentry_block_on_bitmap = extentblock->start - sb->bg_data_block;
 		setBitOff(block_bitmap, extent_block_on_bitmap);
 		setBitOff(block_bitmap, dentry_block_on_bitmap);
+		printf("RMDIR extent block: %d\n", extent_block_on_bitmap);
+		printf("RMDIR dentry block: %d\n", dentry_block_on_bitmap);
 	}
 	// set bit off for inode on inode bitmap
 	a1fs_blk_t inode_on_bitmap = (a1fs_ino_t) curr_ino_num - 1;
+	printf("RMDIR inode block: %d\n", inode_on_bitmap);
 	setBitOff(inode_bitmap, inode_on_bitmap);
 	// change parent directory inode
 	long parent_ino_num = get_parent_dir_ino_num_by_path(path);
@@ -702,6 +705,7 @@ static int a1fs_rmdir(const char *path)
 	while (i < parent_inode->dentry_count){
 		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * parentextentblock->start) + sizeof(a1fs_dentry) * i);
 		if (cur_dir->ino == (a1fs_ino_t) curr_ino_num){
+			printf("RMDIR detnry to 0: %ld\n", i);
 			cur_dir->ino = 0;
 		}
 		i++;
