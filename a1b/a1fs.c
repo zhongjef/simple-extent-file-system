@@ -542,7 +542,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	}
 	
 	// allocate a new directory entry
-	(parent_directory_ino->dentry_count)++;
+	//(parent_directory_ino->dentry_count)++;
 	(parent_directory_ino->links)++;
 	parent_directory_ino->size += (sizeof(a1fs_dentry));
 	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_directory_ino->extentblock));
@@ -595,8 +595,16 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 static int a1fs_rmdir(const char *path)
 {
 	fs_ctx *fs = get_fs();
-
+	
 	//TODO
+	//void *image = fs->image;
+	//long curr_ino_num = get_ino_num_by_path(path);
+	//if (curr_ino_num < 0) {
+		//fprintf(stderr, "rmv_dirERORORROORORORORR\n");
+		//return curr_ino_num;
+	//}
+	//a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_num - 1));
+	
 	(void)path;
 	(void)fs;
 	return -ENOSYS;
