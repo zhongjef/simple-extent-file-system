@@ -432,7 +432,7 @@ int alloc_extent_block(a1fs_inode *ino) {
 	// no more free data block, return error
 	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
 	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
-	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count, 1);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count - sb->bg_data_block, 1);
 	if (some_bit_off < 0) { return -ENOSPC; }
 	ino->extentblock = (a1fs_blk_t) sb->bg_data_block + some_bit_off;
 	setBitOn(data_bitmap, some_bit_off);
@@ -449,7 +449,7 @@ int alloc_an_extent_for_size(a1fs_extent *extent, uint64_t size) {
 	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
 	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
 	uint32_t blocks_needed = ceil_divide(size, A1FS_BLOCK_SIZE);
-	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count, blocks_needed);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count - sb->bg_data_block, blocks_needed);
 	if (some_bit_off < 0) { return -ENOSPC; }
 	// Step 7 change here
 	for (uint32_t i = 0; i < blocks_needed; i++) {
@@ -524,7 +524,7 @@ long init_new_inode(mode_t mode) {
 }
 
 // Insert a new inode num to the parent directory's entries and update metadata accordingly
-int add_new_inode_to_parent_dir(const char *path, a1fs_inode *parent_inode, a1fs_ino_t new_ino_num) {
+int add_new_inode_to_parent_dir(a1fs_inode *parent_inode, a1fs_ino_t new_ino_num, const char *entryname) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
 	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
@@ -558,14 +558,8 @@ int add_new_inode_to_parent_dir(const char *path, a1fs_inode *parent_inode, a1fs
 	}
 
 	new_dir->ino = new_ino_num;
-	// get the directory name we want to create
-	char *dir_name;
-	char cpy_path1[strlen(path) + 1];
-	strcpy(cpy_path1, path);
-	int delim = '/';
-	dir_name = strrchr(path, delim);
-	dir_name+=1;
-	strcpy(new_dir->name, dir_name);
+	// get the entry name we want to create
+	strcpy(new_dir->name, entryname);
 	return 0;
 }
 
@@ -618,8 +612,10 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
 
+	char *entryname = strrchr(path, '/');
+	entryname += 1;
 	// helper function to add a new inode under parent directory's inode
-	int ret = add_new_inode_to_parent_dir(path, parent_directory_ino, new_inode_num);
+	int ret = add_new_inode_to_parent_dir(parent_directory_ino, new_inode_num, entryname);
 	if (ret != 0) { return ret; }
 	return 0;
 }
@@ -690,6 +686,7 @@ void rm_inode_from_parent_directory(long parent_ino_num, long child_ino_num){
 		if (cur_dir->ino == (a1fs_ino_t) child_ino_num){
 			cur_dir->ino = 0;
 			cur_dir->name[0] = '\0';
+			break;
 		}
 		i++;
 	}
@@ -762,7 +759,9 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	if (new_inode_num < 0) { return new_inode_num; }
 	new_inode_num = (a1fs_ino_t) new_inode_num;
 
-	int ret = add_new_inode_to_parent_dir(path, parent_inode, new_inode_num);
+	char *entryname = strrchr(path, '/');
+	entryname+=1;
+	int ret = add_new_inode_to_parent_dir(parent_inode, new_inode_num, entryname);
 	if (ret != 0) { return ret; }	
 	return 0;
 }
@@ -807,12 +806,25 @@ static int a1fs_unlink(const char *path)
 static int a1fs_rename(const char *from, const char *to)
 {
 	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *)image;
 
-	//TODO
-	(void)from;
-	(void)to;
-	(void)fs;
-	return -ENOSYS;
+	a1fs_ino_t from_ino_num = (a1fs_ino_t) get_ino_num_by_path(from);
+	a1fs_ino_t from_parent_ino_num = (a1fs_ino_t) get_parent_dir_ino_num_by_path(from);
+
+	long to_ino_num = get_ino_num_by_path(to);
+	char *entryname = strrchr(from, '/') + 1;
+	// last component does not exists, move "from" to parent dir of "to", then rename "from " to last component of dir
+	if (to_ino_num <= 0) {
+		to_ino_num = get_parent_dir_ino_num_by_path(to);
+		entryname = strrchr(to, '/') + 1;
+	}
+	// Move "from" inode under "to"
+	a1fs_inode *to_ino = (a1fs_inode *)(image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) *((a1fs_ino_t)to_ino_num-1));
+	rm_inode_from_parent_directory(from_parent_ino_num, from_ino_num);
+	int ret = add_new_inode_to_parent_dir(to_ino, from_ino_num, entryname);
+	if (ret != 0) { return ret; }
+	return 0;
 }
 
 
