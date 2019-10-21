@@ -888,6 +888,43 @@ static int a1fs_truncate(const char *path, off_t size)
 }
 
 
+// Helper function to seek a byte in the file represented by inode with offset,
+// return the pointer to the byte, or NULL if offset is beyond EOF
+char *seekbyte(a1fs_inode *inode, off_t offset) {
+	if ((uint64_t)offset > inode->size) {return NULL;}
+
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+
+	a1fs_blk_t blocks_to_skip = offset / A1FS_BLOCK_SIZE;
+	a1fs_extent *curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock);
+	// block number of the remaining bytes
+	a1fs_blk_t last_block;
+	a1fs_blk_t blockcount;
+	// Traverse through the extents
+	for (int i = 0; i < inode->extentcount; i++) {
+		curr_extent += (sizeof(a1fs_extent) * i);
+		blockcount = curr_extent->count;
+		last_block = curr_extent->start;
+		while (blockcount > 0) {
+			if (blocks_to_skip == 0) {break;}
+			last_block++;
+			blockcount--;
+		}
+		if (blocks_to_skip == 0) {break;}
+	}
+	// We have strictly less than 4096 bytes to traverse, so just visit the block using pointer arithmetic
+	int remaining_bytes = offset % A1FS_BLOCK_SIZE;
+	char *target_byte = (char *)(image + A1FS_BLOCK_SIZE * last_block + remaining_bytes);
+	return target_byte;
+}
+
+// pad the buf with size many zeroes
+void pad_zeroes(char *buf, size_t size) {
+	memset(buf, 0, size);
+}
+
+
 /**
  * Read data from a file.
  *
@@ -910,16 +947,31 @@ static int a1fs_truncate(const char *path, off_t size)
 static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
                      struct fuse_file_info *fi)
 {
-	(void)fi;// unused
+	// unused
+	(void)fi;
 	fs_ctx *fs = get_fs();
-
-	//TODO
-	(void)path;
-	(void)buf;
-	(void)size;
-	(void)offset;
-	(void)fs;
-	return -ENOSYS;
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *)image;
+	a1fs_ino_t file_ino_num = (a1fs_ino_t) get_ino_num_by_path(path);
+	a1fs_inode *file_ino = (a1fs_inode *)(image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * file_ino_num);
+	// If file is empty or the offset is beyond EOF, substitude the rest of the data with 0
+	char *currbyte;
+	if (file_ino->size == 0 || (currbyte = seekbyte(file_ino, offset)) == NULL) {
+		pad_zeroes(buf, size);
+		return 0;
+	}
+	uint64_t bytes_read = 0;
+	while (size > 0) {
+		if (bytes_read == file_ino->size - offset) {
+			pad_zeroes(buf, size);
+			break;
+		}
+		memcpy(buf, currbyte, 1);
+		buf++;
+		bytes_read++;
+		size--;
+	}
+	return bytes_read;
 }
 
 /**
