@@ -4,7 +4,6 @@ mkdir new
 stat new 
 ls -al 
 cd new
-stat new
 mkdir new1
 ls -al 
 cd ..
