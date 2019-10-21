@@ -8,5 +8,12 @@ mkdir new1
 ls -al 
 cd ..
 mkdir hello
-ls -al 
+ls -al
+touch ./new
+touch ./new/new1
+cd ./new
+touch ../hello
+stat ./new1
+stat ../hello
+stat ../new
 
