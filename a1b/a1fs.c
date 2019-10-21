@@ -127,7 +127,7 @@ bool is_bit_off(uint32_t *bm, uint32_t i) {
  *   ENOTDIR       a component of the path prefix is not a directory.
  * 
  * @param path  path to any file in the file syste.
- * @return      0 on success; -errno on error;
+ * @return      inode number represented by the path on success; -errno on error;
  */
 long get_ino_num_by_path(const char *path) {
 	
@@ -898,7 +898,6 @@ static int a1fs_truncate(const char *path, off_t size)
 {
 	fs_ctx *fs = get_fs();
 
-	//TODO
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
 	a1fs_ino_t ino_num = get_ino_num_by_path(path);
@@ -914,6 +913,7 @@ static int a1fs_truncate(const char *path, off_t size)
 		unsigned short extent_count = curr_inode->extentcount;
 		sb->s_free_blocks_count -= num_block_delete;
 		while (num_block_delete > 0){
+			// What if it is an free extent?
 			extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * (curr_inode->extentblock) + (a1fs_blk_t)extent_count * A1FS_BLOCK_SIZE);
 			if (extent_block->count >= num_block_delete){
 				if (extent_block->count == num_block_delete){ curr_inode->extentcount --;}
@@ -935,21 +935,25 @@ static int a1fs_truncate(const char *path, off_t size)
 			}
 			extent_count --;
 		}
+		// TODO: What about the remaining bytes strictly less than 4096?
 		curr_inode->size = (uint64_t)size;
+		// TODO: Only update time when shrinking?
 		clock_gettime(CLOCK_REALTIME, &(curr_inode->mtime));
 	}
 	// extending
 	else if (curr_inode->size < (uint64_t)size){
 		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE);
 		if (num_block_need > sb->s_free_blocks_count){ return -ENOSPC;}
-		long result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, num_block_need);
+		// TODO: Remember find_free() returns the index in the bitmap, to use the index we have to add sb->bg_data_block
+		long result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count - sb->bg_data_block, num_block_need);
 		if (result < 0){
 			while (num_block_need > 0){
 				uint32_t longest = find_largest_chunk(data_bitmap, sb->data_block_count);
+				// TODO: Remember find_free() returns the index in the bitmap, to use the index we have to add sb->bg_data_block
 				result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, longest);
 				curr_inode->extentcount ++;
 				a1fs_extent *new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * (curr_inode->extentblock) + curr_inode->extentcount * A1FS_BLOCK_SIZE);
-				new_extent_block->start = result;
+				new_extent_block->start = result + sb->bg_data_block;
 				new_extent_block->count = longest;
 				for (uint32_t j = 0; j < longest; j++){
 					setBitOn(data_bitmap, result + j);
