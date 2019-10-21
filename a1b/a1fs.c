@@ -468,7 +468,7 @@ void fill_with_dentry(a1fs_blk_t blk_num) {
 	void *image = fs->image;
 	a1fs_dentry *curr_dentry;
 	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_dentry); i++) {
-		curr_dentry = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * blk_num + sizeof(a1fs_dentry));
+		curr_dentry = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * blk_num + sizeof(a1fs_dentry) * i);
 		curr_dentry->ino = 0;
 	}
 }
@@ -523,6 +523,52 @@ long init_new_inode(mode_t mode) {
 	return new_inode_num;
 }
 
+// Insert a new inode num to the parent directory's entries and update metadata accordingly
+int add_new_inode_to_parent_dir(const char *path, a1fs_inode *parent_inode, a1fs_ino_t new_ino_num) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
+	// allocate extent block for the parent_inode if it hasn't allocate any yet
+	// Step 7 extends here
+	if (parent_inode->extentcount == 0) {
+		int ret = init_dir_inode_extent(parent_inode);
+		if (ret != 0) { return ret; }
+	}
+
+	parent_inode->size += sizeof(a1fs_dentry);
+	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock));
+	// let new directory entry point to the last spot in block
+	a1fs_dentry *new_dir = NULL;
+	// search for a free directory by checking if the ino == 0
+	uint64_t i = 0;
+	a1fs_dentry *cur_dir;
+	while (i < parent_inode->dentry_count){
+		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
+		if (cur_dir->ino == 0){
+			new_dir = cur_dir;
+			break;
+		}
+		i++;
+	}
+
+	// Step 7
+	if (new_dir == NULL) {
+		// Allocate more extent for direcotrys
+		fprintf(stderr, "Step 7 attention!!!\n");
+	}
+
+	new_dir->ino = new_ino_num;
+	// get the directory name we want to create
+	char *dir_name;
+	char cpy_path1[strlen(path) + 1];
+	strcpy(cpy_path1, path);
+	int delim = '/';
+	dir_name = strrchr(path, delim);
+	dir_name+=1;
+	strcpy(new_dir->name, dir_name);
+	return 0;
+}
+
 /**
  * Create a directory.
  *
@@ -567,50 +613,14 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	long new_inode_num = init_new_inode(__S_IFDIR);
 	if (new_inode_num < 0) {
 		return new_inode_num;
-	} else {
-		new_inode_num = (a1fs_blk_t) new_inode_num;
 	}
+	new_inode_num = (a1fs_blk_t) new_inode_num;
 	
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
-	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
-	// allocate extent block for the parent_directory_ino if it hasn't allocate any yet
-	// Step 7 extends here
-	if (parent_directory_ino->extentcount == 0) {
-		int ret = init_dir_inode_extent(parent_directory_ino);
-		if (ret != 0) { return ret; };
-	}
 
-	parent_directory_ino->size += sizeof(a1fs_dentry);
-	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_directory_ino->extentblock));
-	// let new directory entry point to the last spot in block
-	a1fs_dentry *new_dir = NULL;
-	// search for a free directory by checking if the ino == 0
-	uint64_t i = 0;
-	a1fs_dentry *cur_dir;
-	while (i < parent_directory_ino->dentry_count){
-		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
-		if (cur_dir->ino == 0){
-			new_dir = cur_dir;
-			break;
-		}
-		i++;
-	}
-
-	// Step 7
-	if (new_dir == NULL) {
-		// Allocate more extent for direcotrys
-		(void) mode;
-	}
-
-	new_dir->ino = new_inode_num;
-	// get the directory name we want to create
-	char *dir_name;
-	char cpy_path1[strlen(path) + 1];
-	strcpy(cpy_path1, path);
-	int delim = '/';
-	dir_name = strrchr(path, delim);
-	dir_name+=1;
-	strcpy(new_dir->name, dir_name);
+	// helper function to add a new inode under parent directory's inode
+	int ret = add_new_inode_to_parent_dir(path, parent_directory_ino, new_inode_num);
+	if (ret != 0) { return ret; }
 	return 0;
 }
 
@@ -670,9 +680,7 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	(void)fi;// unused
 	assert(S_ISREG(mode));
 	fs_ctx *fs = get_fs();
-
-		
-	// }
+	
 	(void) path;
 	(void)mode;
 	(void)fs;
