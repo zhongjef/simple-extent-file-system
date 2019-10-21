@@ -649,7 +649,7 @@ int check_dir_empty(const char *path) {
 	return 0;
 }
 
-void rm_inode(long ino_num){
+void rm_inode(a1fs_ino_t ino_num){
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
@@ -664,26 +664,29 @@ void rm_inode(long ino_num){
 		a1fs_blk_t dentry_block_on_bitmap = extentblock->start - sb->bg_data_block;
 		setBitOff(block_bitmap, extent_block_on_bitmap);
 		setBitOff(block_bitmap, dentry_block_on_bitmap);
+		sb->s_free_blocks_count += 2;
 	}
 	// set bit off for inode on inode bitmap
-	a1fs_blk_t inode_on_bitmap = (a1fs_ino_t) ino_num - 1;
+	a1fs_blk_t inode_on_bitmap = ino_num - 1;
 	setBitOff(inode_bitmap, inode_on_bitmap);
+	sb->s_free_inodes_count ++;
 }
 
-void rm_inode_from_parent_directory(long parent_ino_num, long child_ino_num){
+void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_ino_num){
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
 	a1fs_inode *parent_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(parent_ino_num - 1));
 	parent_inode->links --;
 	parent_inode->size -= (sizeof(a1fs_dentry));
+	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
 	a1fs_extent *parentextentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock)); //step7
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
 	// change dentry ino to 0
 	while (i < parent_inode->dentry_count){
 		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * parentextentblock->start) + sizeof(a1fs_dentry) * i);
-		if (cur_dir->ino == (a1fs_ino_t) child_ino_num){
+		if (cur_dir->ino == child_ino_num){
 			cur_dir->ino = 0;
 			cur_dir->name[0] = '\0';
 			break;
@@ -711,9 +714,9 @@ static int a1fs_rmdir(const char *path)
 	//TODO
 	if (check_dir_empty(path) == 1) {return -ENOTEMPTY;}
 	long curr_ino_num = get_ino_num_by_path(path);
-	rm_inode(curr_ino_num);
+	rm_inode((a1fs_ino_t)curr_ino_num);
 	long parent_ino_num = get_parent_dir_ino_num_by_path(path);
-	rm_inode_from_parent_directory(parent_ino_num, curr_ino_num);
+	rm_inode_from_parent_directory((a1fs_ino_t)parent_ino_num, (a1fs_ino_t)curr_ino_num);
 	return 0;
 }
 
@@ -780,9 +783,9 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 static int a1fs_unlink(const char *path)
 {
 	long curr_ino_num = get_ino_num_by_path(path);
-	rm_inode(curr_ino_num);
+	rm_inode((a1fs_ino_t)curr_ino_num);
 	long parent_ino_num = get_parent_dir_ino_num_by_path(path);
-	rm_inode_from_parent_directory(parent_ino_num, curr_ino_num);
+	rm_inode_from_parent_directory((a1fs_ino_t)parent_ino_num, (a1fs_ino_t)curr_ino_num);
 	return 0;
 }
 
