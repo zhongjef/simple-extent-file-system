@@ -466,10 +466,61 @@ int alloc_an_extent_for_size(a1fs_extent *extent, uint64_t size) {
 void fill_with_dentry(a1fs_blk_t blk_num) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	a1fs_dentry *curr_dentry = image + A1FS_BLOCK_SIZE * blk_num;
+	a1fs_dentry *curr_dentry;
 	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_dentry); i++) {
-		curr_dentry[i].ino = 0;
+		curr_dentry = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * blk_num + sizeof(a1fs_dentry));
+		curr_dentry->ino = 0;
 	}
+}
+
+// First allocate an extent block for the directory inode, then allocate an extent of length 1
+// then fill the first block pointed to by the extent with 16 directories
+int init_dir_inode_extent(a1fs_inode *inode) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+
+	int ret0 = alloc_extent_block(inode);
+	if (ret0 != 0) { return ret0; };
+	a1fs_extent *new_extent = image + A1FS_BLOCK_SIZE *(inode->extentblock);
+	int ret1 = alloc_an_extent_for_size(new_extent, sizeof(a1fs_dentry));
+	if (ret1 != 0) {return ret1;}
+	(inode->extentcount)++;
+	// allocate a new directory entry
+	fill_with_dentry(new_extent->start);
+	inode->dentry_count += A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+	(inode->links)++;
+	return 0;
+}
+
+long init_new_inode(mode_t mode) {
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	a1fs_superblock *sb = (a1fs_superblock *) image;
+	if (sb->s_free_inodes_count < 1) {
+		return -ENOSPC;
+	}
+
+	uint32_t *inode_bitmap = (uint32_t *) (image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
+	long free_bit = find_free_entry_of_length_in_bitmap(inode_bitmap, sb->s_inodes_count, 1);
+	// out of inodes to allocate, return ENOSPC
+	if (free_bit < 0) { return free_bit; }
+	// int j = 1;
+	a1fs_inode *new_inode = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (free_bit) * sizeof(a1fs_inode));
+	setBitOn(inode_bitmap, free_bit);
+	a1fs_ino_t new_inode_num = free_bit + 1;
+	(sb->s_free_inodes_count)--;
+	
+	new_inode->mode = (mode | 0777);
+	if (S_ISDIR(mode)) {
+		new_inode->links = 2;
+	} else if (S_ISREG(mode)) {
+		new_inode->links = 1;
+	}
+	new_inode->size = 0;
+	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
+	new_inode->extentcount = 0;
+	new_inode->dentry_count = 0;
+	return new_inode_num;
 }
 
 /**
@@ -503,9 +554,6 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
-	if (sb->s_free_inodes_count < 1) {
-		return -ENOSPC;
-	}
 
 	// get parent directory inode number
 	long parent_directory_ino_num = get_parent_dir_ino_num_by_path(path);
@@ -515,43 +563,24 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	}
 	parent_directory_ino_num = (a1fs_ino_t) parent_directory_ino_num;
 
-	//if there is no free inode available, return ENOSPC
-	uint32_t *inode_bitmap = (uint32_t *) (image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
-	long free_bit = find_free_entry_of_length_in_bitmap(inode_bitmap, sb->s_inodes_count, 1);
-	// out of inodes to allocate
-	if (free_bit < 0) { return free_bit; }
-	// int j = 1;
-	a1fs_inode *new_inode = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (free_bit) * sizeof(a1fs_inode)) ; // == inode_table[1]
-	setBitOn(inode_bitmap, free_bit);
-	a1fs_ino_t new_inode_num = free_bit + 1;
-	(sb->s_free_inodes_count)--;
-	
-	new_inode->mode = (__S_IFDIR | 0777);
-	new_inode->links = 2;
-	new_inode->size = 0;
-	clock_gettime(CLOCK_REALTIME, &(new_inode->mtime));
-	new_inode->extentcount = 0;
-	new_inode->dentry_count = 0;
+	// set up a new inode
+	long new_inode_num = init_new_inode(__S_IFDIR);
+	if (new_inode_num < 0) {
+		return new_inode_num;
+	} else {
+		new_inode_num = (a1fs_blk_t) new_inode_num;
+	}
 	
 	a1fs_inode *parent_directory_ino = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (parent_directory_ino_num - 1) * sizeof(a1fs_inode));
 	clock_gettime(CLOCK_REALTIME, &(parent_directory_ino->mtime));
 	// allocate extent block for the parent_directory_ino if it hasn't allocate any yet
 	// Step 7 extends here
 	if (parent_directory_ino->extentcount == 0) {
-		int ret0 = alloc_extent_block(parent_directory_ino);
-		if (ret0 != 0) { return ret0; };
-		a1fs_extent *new_extent = image + A1FS_BLOCK_SIZE *(parent_directory_ino->extentblock);
-		int ret1 = alloc_an_extent_for_size(new_extent, sizeof(a1fs_dentry));
-		if (ret1 != 0) {return ret1;}
-		(parent_directory_ino->extentcount)++;
-		fill_with_dentry(new_extent->start);
-		parent_directory_ino->dentry_count += A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+		int ret = init_dir_inode_extent(parent_directory_ino);
+		if (ret != 0) { return ret; };
 	}
-	
-	// allocate a new directory entry
-	//(parent_directory_ino->dentry_count)++;
-	(parent_directory_ino->links)++;
-	parent_directory_ino->size += (sizeof(a1fs_dentry));
+
+	parent_directory_ino->size += sizeof(a1fs_dentry);
 	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_directory_ino->extentblock));
 	// let new directory entry point to the last spot in block
 	a1fs_dentry *new_dir = NULL;
@@ -642,8 +671,9 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	assert(S_ISREG(mode));
 	fs_ctx *fs = get_fs();
 
-	//TODO
-	(void)path;
+		
+	// }
+	(void) path;
 	(void)mode;
 	(void)fs;
 	return -ENOSYS;
