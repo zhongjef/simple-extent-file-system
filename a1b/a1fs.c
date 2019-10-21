@@ -668,10 +668,12 @@ void rm_inode(a1fs_ino_t ino_num){
 		a1fs_blk_t dentry_block_on_bitmap = extentblock->start - sb->bg_data_block;
 		setBitOff(block_bitmap, extent_block_on_bitmap);
 		setBitOff(block_bitmap, dentry_block_on_bitmap);
+		sb->s_free_blocks_count += 2;
 	}
 	// set bit off for inode on inode bitmap
 	a1fs_blk_t inode_on_bitmap = ino_num - 1;
 	setBitOff(inode_bitmap, inode_on_bitmap);
+	sb->s_free_inodes_count ++;
 }
 
 void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_ino_num){
