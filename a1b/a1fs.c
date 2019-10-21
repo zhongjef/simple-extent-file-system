@@ -707,6 +707,7 @@ static int a1fs_rmdir(const char *path)
 		if (cur_dir->ino == (a1fs_ino_t) curr_ino_num){
 			printf("RMDIR detnry to 0: %ld\n", i);
 			cur_dir->ino = 0;
+			cur_dir->name[0] = '\0';
 		}
 		i++;
 	}
