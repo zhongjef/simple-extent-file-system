@@ -683,6 +683,7 @@ void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_
 	a1fs_inode *parent_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(parent_ino_num - 1));
 	parent_inode->links --;
 	parent_inode->size -= (sizeof(a1fs_dentry));
+	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
 	a1fs_extent *parentextentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock)); //step7
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
