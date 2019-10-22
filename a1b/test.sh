@@ -16,4 +16,20 @@ touch ../hello
 stat ./new1
 stat ../hello
 stat ../new
-
+cd ..
+echo "hello,world" > newfile
+cat newfile
+echo "the next world" >> newfile
+cat newfile
+unlink newfile 
+ls -al
+rmdir hello
+ls -al
+mkdir moveto
+mkdir movefrom
+mv movefrom moveto
+ls -al
+cd moveto
+ls -al
+cd ..
+echo "hello,world" > newfile
