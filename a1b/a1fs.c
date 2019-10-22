@@ -450,7 +450,7 @@ int alloc_extent_block(a1fs_inode *ino) {
 	// no more free data block, return error
 	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
 	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
-	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count - sb->bg_data_block, 1);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, 1);
 	if (some_bit_off < 0) { return -ENOSPC; }
 	ino->extentblock = (a1fs_blk_t) sb->bg_data_block + some_bit_off;
 	setBitOn(data_bitmap, some_bit_off);
@@ -467,7 +467,7 @@ int alloc_an_extent_for_size(a1fs_extent *extent, uint64_t size) {
 	if (sb->s_free_blocks_count < 1) { return -ENOSPC; }
 	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
 	uint32_t blocks_needed = ceil_divide(size, A1FS_BLOCK_SIZE);
-	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->s_blocks_count - sb->bg_data_block, blocks_needed);
+	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, blocks_needed);
 	if (some_bit_off < 0) { return -ENOSPC; }
 	// Step 7 change here
 	for (uint32_t i = 0; i < blocks_needed; i++) {
@@ -945,7 +945,7 @@ static int a1fs_truncate(const char *path, off_t size)
 		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE);
 		if (num_block_need > sb->s_free_blocks_count){ return -ENOSPC;}
 		// TODO: Remember find_free() returns the index in the bitmap, to use the index we have to add sb->bg_data_block
-		long result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count - sb->bg_data_block, num_block_need);
+		long result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, num_block_need);
 		if (result < 0){
 			while (num_block_need > 0){
 				uint32_t longest = find_largest_chunk(data_bitmap, sb->data_block_count);
@@ -1054,6 +1054,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 			break;
 		}
 		memcpy(buf, currbyte, 1);
+		currbyte++;
 		buf++;
 		bytes_read++;
 		size--;
@@ -1084,14 +1085,30 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 {
 	(void)fi;// unused
 	fs_ctx *fs = get_fs();
+	void *image = fs->image; 
+	a1fs_superblock *sb = (a1fs_superblock *) image;
+	a1fs_ino_t file_ino_num = get_ino_num_by_path(path);
+	a1fs_inode *file_ino = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * file_ino_num);
 
-	//TODO
-	(void)path;
-	(void)buf;
-	(void)size;
-	(void)offset;
-	(void)fs;
-	return -ENOSYS;
+	// Nothing to write
+	if (size == 0) {return 0;}
+
+	// Now size > 0 we have something to write
+	// Check whether file size is enough, if not, allocate more as needed
+	if ((file_ino->size == 0) || (offset+size > file_ino->size)) {
+		int ret = a1fs_truncate(path, offset+size);
+		if (ret < 0) {return ret;}
+	}
+	char *currbyte = seekbyte(file_ino, offset);
+	uint64_t bytes_wrote = 0;
+	while (size > 0) {
+		memcpy(currbyte, buf, 1);
+		currbyte++;
+		buf++;
+		bytes_wrote++;
+		size--;
+	}
+	return bytes_wrote;
 }
 
 
