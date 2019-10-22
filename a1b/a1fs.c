@@ -510,6 +510,7 @@ int init_dir_inode_extent(a1fs_inode *inode) {
 	return 0;
 }
 
+// Create a new inode for the given mode, returns the new inode number
 long init_new_inode(mode_t mode) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
@@ -560,6 +561,7 @@ int add_new_inode_to_parent_dir(a1fs_inode *parent_inode, a1fs_ino_t new_ino_num
 	// search for a free directory by checking if the ino == 0
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
+	// Step 7
 	while (i < parent_inode->dentry_count){
 		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
 		if (cur_dir->ino == 0){
