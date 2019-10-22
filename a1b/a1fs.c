@@ -651,20 +651,21 @@ int check_dir_empty(const char *path) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *) image;
-	long curr_ino_num = get_ino_num_by_path(path);
+	a1fs_ino_t curr_ino_num = (a1fs_ino_t) get_ino_num_by_path(path);
 	a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_num - 1));
-	if (curr_inode->dentry_count == 0) { return 0;}
-	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock)); //step7
-	uint64_t i = 0;
-	a1fs_dentry *cur_dir;
-	while (i < curr_inode->dentry_count){
-		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
-		if (cur_dir->ino > 0){
-			return 1;
-		}
-		i++;
-	}
-	return 0;
+	return curr_inode->size > 0;
+	// if (curr_inode->dentry_count == 0) { return 0;}
+	// a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock)); //step7
+	// uint64_t i = 0;
+	// a1fs_dentry *cur_dir;
+	// while (i < curr_inode->dentry_count){
+	// 	cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
+	// 	if (cur_dir->ino > 0){
+	// 		return 1;
+	// 	}
+	// 	i++;
+	// }
+	// return 0;
 }
 
 void rm_inode(a1fs_ino_t ino_num){
