@@ -1025,7 +1025,6 @@ static int a1fs_truncate(const char *path, off_t size)
 	}
 	// extending
 	else if (curr_inode->size < (uint64_t)size){
-		printf("\nEntered into extending\n");
 		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE) - ceil_divide(curr_inode->size, A1FS_BLOCK_SIZE);
 		printf("%d\n", num_block_need);
 		if (num_block_need > sb->s_free_blocks_count){ return -ENOSPC;}
@@ -1049,6 +1048,26 @@ static int a1fs_truncate(const char *path, off_t size)
 				char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
 				pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
 				curr_inode->size = (uint64_t)size;
+				sb->s_free_blocks_count -= num_block_need;
+			}
+			else if (curr_inode->extentcount > 0){
+				unsigned short i = 0;
+				while (i < curr_inode->extentcount){
+					a1fs_extent * new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)i * A1FS_BLOCK_SIZE);
+					if (new_extent_block->count == 0){
+						new_extent_block->start = (a1fs_blk_t) result + sb->bg_data_block;
+						new_extent_block->count = num_block_need;
+						for (uint32_t j = 0; j < num_block_need; j++){
+							setBitOn(data_bitmap, (uint32_t)result + j);
+						}
+						curr_inode->size = (uint64_t)size;
+						sb->s_free_blocks_count -= num_block_need;
+						char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
+						pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
+						break;
+					}
+					i ++;
+				}
 			}
 		}
 	}
