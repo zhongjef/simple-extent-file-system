@@ -118,6 +118,43 @@ bool is_bit_off(uint32_t *bm, uint32_t i) {
 	return ( (bm[i/int_bits] & (1 << (i%int_bits))) == 0 );
 }
 
+
+// Helper function to seek a byte in the file represented by inode with offset,
+// return the pointer to the byte, or NULL if offset is beyond EOF
+void *seekbyte(a1fs_inode *inode, off_t offset) {
+	uint64_t implicit_file_size = inode->size;
+	if (S_ISDIR(inode->mode)) {
+		implicit_file_size = sizeof(a1fs_dentry) * inode->dentry_count;
+	}
+	if ((uint64_t)offset > implicit_file_size) {return NULL;}
+
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+
+	a1fs_blk_t blocks_to_skip = offset / A1FS_BLOCK_SIZE;
+	a1fs_extent *curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock);
+	// block number of the remaining bytes
+	a1fs_blk_t last_block;
+	a1fs_blk_t blockcount;
+	// Traverse through the extents
+	for (int i = 0; i < inode->extentcount; i++) {
+		curr_extent += (sizeof(a1fs_extent) * i);
+		blockcount = curr_extent->count;
+		last_block = curr_extent->start;
+		while (blockcount > 0) {
+			if (blocks_to_skip == 0) {break;}
+			last_block++;
+			blockcount--;
+		}
+		if (blocks_to_skip == 0) {break;}
+	}
+	// We have strictly less than 4096 bytes to traverse, so just visit the block using pointer arithmetic
+	int remaining_bytes = offset % A1FS_BLOCK_SIZE;
+	void *target_byte = (void *)(image + A1FS_BLOCK_SIZE * last_block + remaining_bytes);
+	return target_byte;
+}
+
+
 /**
  * Get inode number by absolute path.
  * 
@@ -160,7 +197,6 @@ long get_ino_num_by_path(const char *path) {
 	// Start with the Root inode
 	a1fs_ino_t  curr_ino_t = 1;
 	a1fs_inode  *curr_inode;
-	a1fs_extent *curr_extent;
 	uint64_t    dentry_count;
 	int        foundPathCompo;
 	a1fs_dentry *curr_dentry;
@@ -185,13 +221,13 @@ long get_ino_num_by_path(const char *path) {
 			return -ENOENT;
 		}
 		// If dentry_count > 0, then the inode must have allocated some block to store the extent
-		curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
+		// curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
 		
 		// Search in the current inode 's directory entries to find the next path component
 		foundPathCompo = 0;
 		for (uint64_t i = 0; i < dentry_count; i++) {
-			curr_dentry = (a1fs_dentry *)(image + A1FS_BLOCK_SIZE*(curr_extent->start) + (sizeof(a1fs_dentry) * i));
-			if (strcmp(curr_dentry->name, pathComponent) == 0) { // At root inode what if path component is NULL
+			curr_dentry = (a1fs_dentry *)(seekbyte(curr_inode, sizeof(a1fs_dentry) * i));
+			if (strcmp(curr_dentry->name, pathComponent) == 0) {
 				foundPathCompo = 1;
 				curr_ino_t = curr_dentry->ino;
 				break;
@@ -282,15 +318,6 @@ static int a1fs_getattr(const char *path, struct stat *st)
 {
 	memset(st, 0, sizeof(*st));
 	fs_ctx *fs = get_fs();
-	// NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	// get the address to the beginning of file system
-	// if (strcmp(path, "/") == 0) {
-	// 	st->st_mode = S_IFDIR | 0777;
-	// 	return 0;
-	// }
-	// (void)fs;
-	// return -ENOSYS;
 
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
@@ -303,11 +330,8 @@ static int a1fs_getattr(const char *path, struct stat *st)
 		return curr_ino_num;
 	}
 	a1fs_ino_t curr_ino_t = (a1fs_ino_t) curr_ino_num;
-	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
-	// a1fs_inode *curr_inode = (inode_table + sizeof(a1fs_inode)*(curr_ino_t - 1));
 
 	a1fs_inode *curr_inode = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_t - 1));
-	// TODO what should I put here for st_mode?
 	st->st_mode = curr_inode->mode;
 	st->st_nlink = (nlink_t)(curr_inode->links);
 	blkcnt_t sectors_used = (blkcnt_t)(curr_inode->size / 512);
@@ -348,15 +372,6 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	(void)fi;// unused
 	fs_ctx *fs = get_fs();
 
-	//NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	// if (strcmp(path, "/") == 0) {
-		// filler(buf, "." , NULL, 0);
-		// filler(buf, "..", NULL, 0);
-	// 	return 0;
-	// }
-	// (void)fs;
-	// return -ENOSYS;
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
 	// a1fs_inode *inode_table = (a1fs_inode *)();
@@ -367,13 +382,13 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		return curr_ino_num;
 	}
 	a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_num - 1));
-	a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
+	// a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
 	// a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	a1fs_dentry *curr_dir;
 	for (uint64_t i = 0; i < curr_inode->dentry_count; i++) {
-		curr_dir = (a1fs_dentry *)  (image + A1FS_BLOCK_SIZE*(curr_extent->start) + sizeof(a1fs_dentry) * i);
+		curr_dir = (a1fs_dentry *) seekbyte(curr_inode, sizeof(a1fs_dentry) * i);
 		if (curr_dir->ino != 0) {
 			filler(buf, curr_dir->name, NULL, 0);
 		}
@@ -497,6 +512,7 @@ void fill_with_dentry(a1fs_blk_t blk_num) {
 	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_dentry); i++) {
 		curr_dentry = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * blk_num + sizeof(a1fs_dentry) * i);
 		curr_dentry->ino = 0;
+		strcpy(curr_dentry->name, "Unused dir");
 	}
 }
 
@@ -561,6 +577,7 @@ long init_new_inode(mode_t mode) {
 int add_new_inode_to_parent_dir(a1fs_inode *parent_inode, a1fs_ino_t new_ino_num, const char *entryname) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
+	// a1fs_superblock *sb = (a1fs_superblock *)image;
 	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
 	// allocate extent block for the parent_inode if it hasn't allocate any yet
 	// Step 7 extends here
@@ -570,26 +587,44 @@ int add_new_inode_to_parent_dir(a1fs_inode *parent_inode, a1fs_ino_t new_ino_num
 	}
 
 	parent_inode->size += sizeof(a1fs_dentry);
-	a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock));
+	// a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock));
 	// let new directory entry point to the last spot in block
 	a1fs_dentry *new_dir = NULL;
 	// search for a free directory by checking if the ino == 0
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
-	// Step 7
+	off_t offset = 0;
 	while (i < parent_inode->dentry_count){
-		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
+		// cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
+		cur_dir = (a1fs_dentry *) seekbyte(parent_inode, offset);
 		if (cur_dir->ino == 0){
 			new_dir = cur_dir;
 			break;
 		}
+		offset += sizeof(a1fs_dentry);
 		i++;
 	}
 
-	// Step 7
+	// Allocate more extent for the free directory
 	if (new_dir == NULL) {
-		// Allocate more extent for direcotrys
-		fprintf(stderr, "Step 7 attention!!!\n");
+		a1fs_extent *curr_extent = NULL;
+		a1fs_extent *free_extent = NULL;
+		// Find a free extent to allocate more directories
+		for (int i = 0; i < parent_inode->extentcount; i++) {
+			curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE*(parent_inode->extentblock) + sizeof(a1fs_extent) * i);
+			if (curr_extent->count == 0) {
+				free_extent = curr_extent;
+				break;
+			}
+		}
+		// Cannot find any free extent, no space
+		if (free_extent == NULL) {
+			return -ENOSPC;
+		}
+		int ret1 = alloc_an_extent_for_size(free_extent, sizeof(a1fs_dentry));
+		// Not enough free data blocks left to new directories
+		if (ret1 < 0) {return ret1;}
+		new_dir = (a1fs_dentry *)(image + A1FS_BLOCK_SIZE * free_extent->start);
 	}
 
 	new_dir->ino = new_ino_num;
@@ -671,18 +706,6 @@ int check_dir_empty(const char *path) {
 	a1fs_ino_t curr_ino_num = (a1fs_ino_t) get_ino_num_by_path(path);
 	a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_num - 1));
 	return curr_inode->size > 0;
-	// if (curr_inode->dentry_count == 0) { return 0;}
-	// a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock)); //step7
-	// uint64_t i = 0;
-	// a1fs_dentry *cur_dir;
-	// while (i < curr_inode->dentry_count){
-	// 	cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
-	// 	if (cur_dir->ino > 0){
-	// 		return 1;
-	// 	}
-	// 	i++;
-	// }
-	// return 0;
 }
 
 void rm_inode(a1fs_ino_t ino_num){
@@ -693,14 +716,21 @@ void rm_inode(a1fs_ino_t ino_num){
 	uint32_t *block_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
 	uint32_t *inode_bitmap = (uint32_t *) (image + sb->bg_inode_bitmap * A1FS_BLOCK_SIZE);
 	// set bit off for extent block and dentry block on data bitmap
-	if (curr_inode->extentcount > 0){ //step7
-		a1fs_blk_t extent_block = curr_inode->extentblock;
-		a1fs_blk_t extent_block_on_bitmap = extent_block - sb->bg_data_block;
-		a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock)); 
-		a1fs_blk_t dentry_block_on_bitmap = extentblock->start - sb->bg_data_block;
+	if (curr_inode->extentcount > 0){
+
+		a1fs_extent *curr_extent;
+		// Free each extent's block
+		for (uint32_t i = 0; i < curr_inode->extentblock; i++) {
+			curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * curr_inode->extentblock + sizeof(a1fs_extent) * i);
+			for (uint32_t i = 0; i < curr_extent->count; i++) {
+				setBitOff(block_bitmap, curr_extent->start + i - sb->bg_data_block);
+				sb->s_free_blocks_count++;
+			}
+		}
+		// Free the inode's extent block
+		a1fs_blk_t extent_block_on_bitmap = curr_inode->extentblock - sb->bg_data_block;
 		setBitOff(block_bitmap, extent_block_on_bitmap);
-		setBitOff(block_bitmap, dentry_block_on_bitmap);
-		sb->s_free_blocks_count += 2;
+		sb->s_free_blocks_count++;
 	}
 	// set bit off for inode on inode bitmap
 	a1fs_blk_t inode_on_bitmap = ino_num - 1;
@@ -716,17 +746,19 @@ void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_
 	parent_inode->links --;
 	parent_inode->size -= (sizeof(a1fs_dentry));
 	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
-	a1fs_extent *parentextentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock)); //step7
+	// a1fs_extent *parentextentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock)); //step7
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
+	off_t offset = 0;
 	// change dentry ino to 0
 	while (i < parent_inode->dentry_count){
-		cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * parentextentblock->start) + sizeof(a1fs_dentry) * i);
+		cur_dir = (a1fs_dentry *) seekbyte(parent_inode, offset);
 		if (cur_dir->ino == child_ino_num){
 			cur_dir->ino = 0;
 			cur_dir->name[0] = '\0';
 			break;
 		}
+		offset += sizeof(a1fs_dentry);
 		i++;
 	}
 }
@@ -1072,36 +1104,6 @@ static int a1fs_truncate(const char *path, off_t size)
 	return 0;
 }
 
-// Helper function to seek a byte in the file represented by inode with offset,
-// return the pointer to the byte, or NULL if offset is beyond EOF
-char *seekbyte(a1fs_inode *inode, off_t offset) {
-	if ((uint64_t)offset > inode->size) {return NULL;}
-
-	fs_ctx *fs = get_fs();
-	void *image = fs->image;
-
-	a1fs_blk_t blocks_to_skip = offset / A1FS_BLOCK_SIZE;
-	a1fs_extent *curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock);
-	// block number of the remaining bytes
-	a1fs_blk_t last_block;
-	a1fs_blk_t blockcount;
-	// Traverse through the extents
-	for (int i = 0; i < inode->extentcount; i++) {
-		curr_extent += (sizeof(a1fs_extent) * i);
-		blockcount = curr_extent->count;
-		last_block = curr_extent->start;
-		while (blockcount > 0) {
-			if (blocks_to_skip == 0) {break;}
-			last_block++;
-			blockcount--;
-		}
-		if (blocks_to_skip == 0) {break;}
-	}
-	// We have strictly less than 4096 bytes to traverse, so just visit the block using pointer arithmetic
-	int remaining_bytes = offset % A1FS_BLOCK_SIZE;
-	char *target_byte = (char *)(image + A1FS_BLOCK_SIZE * last_block + remaining_bytes);
-	return target_byte;
-}
 
 /**
  * Read data from a file.
@@ -1134,7 +1136,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 	a1fs_inode *file_ino = (a1fs_inode *)(image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * file_ino_num);
 	// If file is empty or the offset is beyond EOF, substitude the rest of the data with 0
 	char *currbyte;
-	if (file_ino->size == 0 || (currbyte = seekbyte(file_ino, offset)) == NULL) {
+	if (file_ino->size == 0 || (currbyte = (char *)seekbyte(file_ino, offset)) == NULL) {
 		pad_zeroes(buf, size);
 		return 0;
 	}
@@ -1145,9 +1147,9 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 			break;
 		}
 		memcpy(buf, currbyte, 1);
-		currbyte++;
 		buf++;
 		bytes_read++;
+		currbyte = (char *)seekbyte(file_ino, offset+bytes_read);
 		size--;
 	}
 	return bytes_read;
@@ -1190,13 +1192,13 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 		int ret = a1fs_truncate(path, offset+size);
 		if (ret < 0) {return ret;}
 	}
-	char *currbyte = seekbyte(file_ino, offset);
+	char *currbyte = (char *)seekbyte(file_ino, offset);
 	uint64_t bytes_wrote = 0;
 	while (size > 0) {
 		memcpy(currbyte, buf, 1);
-		currbyte++;
 		buf++;
 		bytes_wrote++;
+		currbyte = (char *)seekbyte(file_ino, offset+bytes_wrote);
 		size--;
 	}
 	return bytes_wrote;
