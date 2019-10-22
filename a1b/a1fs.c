@@ -450,7 +450,7 @@ uint32_t find_largest_chunk(uint32_t *bitmap, uint32_t limit){
 }
 
 /**
- * Allocate a extent block for the inode and modify corresponding metadata
+ * Allocate a extent block for the empty inode and modify corresponding metadata
  */
 int alloc_extent_block(a1fs_inode *ino) {
 	fs_ctx *fs = get_fs();
@@ -970,8 +970,10 @@ static int a1fs_truncate(const char *path, off_t size)
 				if (extent_block->count == num_block_delete){ 
 					extent_block->count = 0;
 					}
-				a1fs_blk_t old_count = extent_block->count;
-				extent_block->count -= num_block_delete;
+				else{
+					a1fs_blk_t old_count = extent_block->count;
+					extent_block->count -= num_block_delete;
+				}
 				for (uint32_t i = 0; i < num_block_delete; i++){
 					setBitOff(data_bitmap, extent_block->start + old_count - i - sb->s_free_blocks_count);
 				}
