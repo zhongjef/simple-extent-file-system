@@ -150,7 +150,7 @@ long get_ino_num_by_path(const char *path) {
 	// get the address to the beginning of file system
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	a1fs_superblock *sb          = (a1fs_superblock)image;
+	a1fs_superblock *sb          = (a1fs_superblock *)image;
 	
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
@@ -510,7 +510,7 @@ int init_dir_inode_extent(a1fs_inode *inode) {
 	if (ret0 != 0) { return ret0; };
 	a1fs_extent *curr_extent;
 	// Initialize 512 free extents
-	for (int i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_extent); i++) {
+	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_extent); i++) {
 		curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock + sizeof(a1fs_extent) * i);
 		curr_extent->count = 0;
 	}
