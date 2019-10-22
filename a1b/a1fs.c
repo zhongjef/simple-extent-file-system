@@ -968,12 +968,7 @@ static int a1fs_truncate(const char *path, off_t size)
 			extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)extent_count * A1FS_BLOCK_SIZE);
 			if (extent_block->count >= num_block_delete){
 				a1fs_blk_t old_count = extent_block->count;
-				if (extent_block->count == num_block_delete){ 
-					extent_block->count = 0;
-					}
-				else{
-					extent_block->count -= num_block_delete;
-				}
+				extent_block->count -= num_block_delete;
 				for (uint32_t i = 0; i < num_block_delete; i++){
 					setBitOff(data_bitmap, extent_block->start + old_count - i - sb->s_free_blocks_count);
 				}
