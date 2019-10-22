@@ -3,5 +3,3 @@ fusermount -u /tmp/mnt
 make clean
 cd /tmp/mnt
 cat newfile
-cd 
-rmdir /tmp/mnt
