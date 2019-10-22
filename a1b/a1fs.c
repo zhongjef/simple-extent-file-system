@@ -879,6 +879,44 @@ static int a1fs_utimens(const char *path, const struct timespec tv[2])
 	return 0;
 }
 
+// return 0 if there are enough free extents, otherwise return 1
+int if_extent_can_hold_length(uint32_t *bitmap, uint32_t limit, uint32_t len, a1fs_inode *inode){
+	fs_ctx *fs = get_fs();
+	void *image = fs->image;
+	uint32_t remaining = len;
+	int extent_need = 0;
+	while (remaining > 0){
+		uint32_t longest = find_largest_chunk(bitmap, limit);
+		if (longest > remaining){
+			extent_need ++;
+			remaining = 0;
+		} else{
+			extent_need ++;
+			remaining -= longest;
+		}
+	}
+	unsigned short extent_count = inode->extentcount;
+	a1fs_extent *new_extent_block;
+	unsigned short i = 0;
+	while (i < extent_count){
+		if (extent_need == 0){break;}
+		new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * inode->extentblock + (a1fs_blk_t)i * A1FS_BLOCK_SIZE);
+		if (new_extent_block->count == 0){
+			extent_need --;
+		}
+		i++;
+	}
+	if (extent_need == 0){
+		return 0;
+	}
+	return 1;
+}
+
+// pad the buf with size many zeroes
+void pad_zeroes(char *buf, size_t size) {
+	memset(buf, 0, size);
+}
+
 /**
  * Change the size of a file.
  *
@@ -906,20 +944,23 @@ static int a1fs_truncate(const char *path, off_t size)
 	a1fs_ino_t ino_num = get_ino_num_by_path(path);
 	a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(ino_num - 1));
 	uint32_t *data_bitmap = (uint32_t *) (image + sb->bg_block_bitmap * A1FS_BLOCK_SIZE);
+	clock_gettime(CLOCK_REALTIME, &(curr_inode->mtime));
 	if(curr_inode->size == (uint64_t)size) {return 0;}
 	// shirnking
 	else if (curr_inode->size > (uint64_t)size){
+		curr_inode->size = (uint64_t)size;
 		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE);
 		uint32_t num_block_old = ceil_divide((uint32_t)curr_inode->size, A1FS_BLOCK_SIZE);
 		uint32_t num_block_delete = num_block_old - num_block_need;
 		a1fs_extent *extent_block;
 		unsigned short extent_count = curr_inode->extentcount;
-		sb->s_free_blocks_count -= num_block_delete;
+		sb->s_free_blocks_count += num_block_delete;
 		while (num_block_delete > 0){
-			// What if it is an free extent?
-			extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * (curr_inode->extentblock) + (a1fs_blk_t)extent_count * A1FS_BLOCK_SIZE);
+			extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)extent_count * A1FS_BLOCK_SIZE);
 			if (extent_block->count >= num_block_delete){
-				if (extent_block->count == num_block_delete){ curr_inode->extentcount --;}
+				if (extent_block->count == num_block_delete){ 
+					extent_block->count = 0;
+					}
 				a1fs_blk_t old_count = extent_block->count;
 				extent_block->count -= num_block_delete;
 				for (uint32_t i = 0; i < num_block_delete; i++){
@@ -927,56 +968,97 @@ static int a1fs_truncate(const char *path, off_t size)
 				}
 				num_block_delete = 0;
 			} 
-			else {
+			else if (extent_block->count < num_block_delete && extent_block->count > 0){ 
 				a1fs_blk_t old_count = extent_block->count;
 				extent_block->count = 0;
 				for (uint32_t i = 0; i < old_count; i++){
 					setBitOff(data_bitmap, extent_block->start + old_count - i - sb->s_free_blocks_count);
 				}
 				num_block_delete -= old_count;
-				curr_inode->extentcount --;
 			}
 			extent_count --;
 		}
-		// TODO: What about the remaining bytes strictly less than 4096?
-		curr_inode->size = (uint64_t)size;
-		// TODO: Only update time when shrinking?
-		clock_gettime(CLOCK_REALTIME, &(curr_inode->mtime));
 	}
 	// extending
 	else if (curr_inode->size < (uint64_t)size){
-		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE);
+		uint32_t num_block_need = ceil_divide((uint32_t)size, A1FS_BLOCK_SIZE) - ceil_divide(curr_inode->size, A1FS_BLOCK_SIZE);
 		if (num_block_need > sb->s_free_blocks_count){ return -ENOSPC;}
-		// TODO: Remember find_free() returns the index in the bitmap, to use the index we have to add sb->bg_data_block
 		long result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, num_block_need);
 		if (result < 0){
+			if (if_extent_can_hold_length(data_bitmap, sb->data_block_count, num_block_need, curr_inode) == 1){return -ENOSPC;}
+			curr_inode->size = (uint64_t)size;
 			while (num_block_need > 0){
 				uint32_t longest = find_largest_chunk(data_bitmap, sb->data_block_count);
-				// TODO: Remember find_free() returns the index in the bitmap, to use the index we have to add sb->bg_data_block
-				result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, longest);
-				curr_inode->extentcount ++;
-				a1fs_extent *new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * (curr_inode->extentblock) + curr_inode->extentcount * A1FS_BLOCK_SIZE);
-				new_extent_block->start = result + sb->bg_data_block;
-				new_extent_block->count = longest;
-				for (uint32_t j = 0; j < longest; j++){
-					setBitOn(data_bitmap, result + j);
+				if (longest >= num_block_need){ 
+					result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, longest);
+					unsigned short extent_count = curr_inode->extentcount;
+					a1fs_extent *new_extent_block;
+					unsigned short i = 0;
+					while (i < extent_count){
+						new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)i * A1FS_BLOCK_SIZE);
+						if (new_extent_block->count == 0){
+							new_extent_block->start = (a1fs_blk_t)result + sb->bg_data_block;
+							new_extent_block->count = num_block_need;
+							for (uint32_t j = 0; j < num_block_need; j++){
+								setBitOn(data_bitmap, (uint32_t)result + j);
+							}
+							char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
+							pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
+							break;
+						}
+						i ++;
+					}
+					num_block_need = 0;
 				}
-				num_block_need -= longest;
-			}
+				else if (longest < num_block_need){
+					result = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, longest);
+					unsigned short extent_count = curr_inode->extentcount;
+					a1fs_extent *new_extent_block;
+					unsigned short i = 0;
+					while (i < extent_count){
+						new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)i * A1FS_BLOCK_SIZE);
+						if (new_extent_block->count == 0){
+							new_extent_block->start = (a1fs_blk_t)result + sb->bg_data_block;
+							new_extent_block->count = longest;
+							for (uint32_t j = 0; j < longest; j++){
+								setBitOn(data_bitmap, (uint32_t)result + j);
+							}
+							char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
+							pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
+							num_block_need -= longest;
+							break;
+						}
+						i ++;
+					}
+				}
+			} 
 		} else{
-			curr_inode->extentcount ++;
-			a1fs_extent *new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * (curr_inode->extentblock) + curr_inode->extentcount * A1FS_BLOCK_SIZE);
-			new_extent_block->start = result;
-			new_extent_block->count = num_block_need;
-			for (uint32_t j = 0; j < num_block_need; j++){
-				setBitOn(data_bitmap, result + j);
+			unsigned short extent_count = curr_inode->extentcount;
+			a1fs_extent *new_extent_block;
+			unsigned short i = 0;
+			while (i < extent_count){
+				new_extent_block = (a1fs_extent *) (image + A1FS_BLOCK_SIZE * curr_inode->extentblock + (a1fs_blk_t)i * A1FS_BLOCK_SIZE);
+				if (new_extent_block->count == 0){
+					new_extent_block->start = (a1fs_blk_t) result + sb->bg_data_block;
+					new_extent_block->count = num_block_need;
+					for (uint32_t j = 0; j < num_block_need; j++){
+						setBitOn(data_bitmap, (uint32_t)result + j);
+					}
+					curr_inode->size = (uint64_t)size;
+					sb->s_free_blocks_count -= num_block_need;
+					char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
+					pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
+					break;
+				}
+				i ++;
+			}
+			if (curr_inode->size != (uint64_t)size){
+				return -ENOSPC; // if no extent where its count == 0, in other words, no free extent
 			}
 		}
-		(sb->s_free_blocks_count) -= num_block_need;
 	}
 	return 0;
 }
-
 
 // Helper function to seek a byte in the file represented by inode with offset,
 // return the pointer to the byte, or NULL if offset is beyond EOF
@@ -1008,12 +1090,6 @@ char *seekbyte(a1fs_inode *inode, off_t offset) {
 	char *target_byte = (char *)(image + A1FS_BLOCK_SIZE * last_block + remaining_bytes);
 	return target_byte;
 }
-
-// pad the buf with size many zeroes
-void pad_zeroes(char *buf, size_t size) {
-	memset(buf, 0, size);
-}
-
 
 /**
  * Read data from a file.
