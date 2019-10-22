@@ -132,21 +132,23 @@ void *seekbyte(a1fs_inode *inode, off_t offset) {
 	void *image = fs->image;
 
 	a1fs_blk_t blocks_to_skip = offset / A1FS_BLOCK_SIZE;
-	a1fs_extent *curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock);
+	a1fs_extent *curr_extent;
 	// block number of the remaining bytes
 	a1fs_blk_t last_block;
 	a1fs_blk_t blockcount;
 	// Traverse through the extents
 	for (int i = 0; i < inode->extentcount; i++) {
-		curr_extent += (sizeof(a1fs_extent) * i);
+		curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock + sizeof(a1fs_extent) * i);
 		blockcount = curr_extent->count;
-		last_block = curr_extent->start;
-		while (blockcount > 0) {
+		if (blockcount > 0) {
+			last_block = curr_extent->start;
+			while (blockcount > 0) {
+				if (blocks_to_skip == 0) {break;}
+				last_block++;
+				blockcount--;
+			}
 			if (blocks_to_skip == 0) {break;}
-			last_block++;
-			blockcount--;
 		}
-		if (blocks_to_skip == 0) {break;}
 	}
 	// We have strictly less than 4096 bytes to traverse, so just visit the block using pointer arithmetic
 	int remaining_bytes = offset % A1FS_BLOCK_SIZE;
@@ -1020,9 +1022,10 @@ static int a1fs_truncate(const char *path, off_t size)
 					setBitOn(data_bitmap, (uint32_t)result + j);
 				}
 				curr_inode->extentcount = 512;
+				a1fs_extent *curr_extent_block; 
 				for (uint32_t i = 1; i < A1FS_BLOCK_SIZE / sizeof(a1fs_extent); i++) {
-					new_extent_block = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * curr_inode->extentblock + sizeof(a1fs_extent) * i);
-					new_extent_block->count = 0;
+					curr_extent_block = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * curr_inode->extentblock + sizeof(a1fs_extent) * i);
+					curr_extent_block->count = 0;
 				}
 				char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
 				pad_zeroes(new_data_block, new_extent_block->count * A1FS_BLOCK_SIZE);
@@ -1073,7 +1076,7 @@ static int a1fs_truncate(const char *path, off_t size)
 						if (new_extent_block->count == 0){
 							new_extent_block->start = (a1fs_blk_t)result + sb->bg_data_block;
 							new_extent_block->count = num_block_need;
-								for (uint32_t j = 0; j < num_block_need; j++){
+							for (uint32_t j = 0; j < num_block_need; j++){
 									setBitOn(data_bitmap, (uint32_t)result + j);
 							}
 							char * new_data_block = (char *) (image + A1FS_BLOCK_SIZE * new_extent_block->start);
