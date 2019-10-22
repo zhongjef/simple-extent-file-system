@@ -33,4 +33,4 @@ OBJ_FILES = $(SRC_FILES:.c=.o)
 	$(CC) $< -o $@ -c -MMD $(CFLAGS)
 
 clean:
-	rm -f $(OBJ_FILES) $(OBJ_FILES:.o=.d) a1fs mkfs.a1fs *.img
+	rm -f $(OBJ_FILES) $(OBJ_FILES:.o=.d) a1fs mkfs.a1fs
