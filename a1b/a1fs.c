@@ -150,7 +150,7 @@ long get_ino_num_by_path(const char *path) {
 	// get the address to the beginning of file system
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	a1fs_superblock *sb          = image;
+	a1fs_superblock *sb          = (a1fs_superblock)image;
 	
 	// TODO: For Step 2, we initially assume that dentry_count is small enough
 	// 		 so that all dentry are stored in one block, but we actually would
