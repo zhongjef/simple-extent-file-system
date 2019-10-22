@@ -508,7 +508,13 @@ int init_dir_inode_extent(a1fs_inode *inode) {
 
 	int ret0 = alloc_extent_block(inode);
 	if (ret0 != 0) { return ret0; };
-	a1fs_extent *new_extent = image + A1FS_BLOCK_SIZE *(inode->extentblock);
+	a1fs_extent *curr_extent;
+	// Initialize 512 free extents
+	for (int i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_extent); i++) {
+		curr_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE * inode->extentblock + sizeof(a1fs_extent) * i);
+		curr_extent->count = 0;
+	}
+	a1fs_extent *new_extent = (a1fs_extent *)(image + A1FS_BLOCK_SIZE *(inode->extentblock));
 	int ret1 = alloc_an_extent_for_size(new_extent, sizeof(a1fs_dentry));
 	if (ret1 != 0) {return ret1;}
 	(inode->extentcount)++;
