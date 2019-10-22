@@ -187,12 +187,7 @@ long get_ino_num_by_path(const char *path) {
 	// get the address to the beginning of file system
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	a1fs_superblock *sb          = (a1fs_superblock *)image;
-	
-	// TODO: For Step 2, we initially assume that dentry_count is small enough
-	// 		 so that all dentry are stored in one block, but we actually would
-	//       have to look into other blocks within the same extent, or even
-	//       other extents.
+	a1fs_superblock *sb = (a1fs_superblock *)image;
 
 	// Start with the Root inode
 	a1fs_ino_t  curr_ino_t = 1;
@@ -220,9 +215,7 @@ long get_ino_num_by_path(const char *path) {
 		if (dentry_count == 0) {
 			return -ENOENT;
 		}
-		// If dentry_count > 0, then the inode must have allocated some block to store the extent
-		// curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
-		
+
 		// Search in the current inode 's directory entries to find the next path component
 		foundPathCompo = 0;
 		for (uint64_t i = 0; i < dentry_count; i++) {
@@ -286,7 +279,6 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	memset(st, 0, sizeof(*st));
 	st->f_bsize   = A1FS_BLOCK_SIZE;
 	st->f_frsize  = A1FS_BLOCK_SIZE;
-	//TODO
 	a1fs_superblock *sb = fs->image;
 	st->f_blocks = sb->size / A1FS_BLOCK_SIZE;
 	st->f_bfree = sb->s_free_blocks_count;
@@ -321,7 +313,6 @@ static int a1fs_getattr(const char *path, struct stat *st)
 
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
-	// a1fs_inode *inode_table = (a1fs_inode *)(image + A1FS_BLOCK_SIZE*(sb->bg_inode_table));
 	printf("GETATTR Path passed is: %s\n", path);
 
 	long curr_ino_num = get_ino_num_by_path(path);
@@ -374,7 +365,6 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	void *image = fs->image;
 	a1fs_superblock *sb = image;
-	// a1fs_inode *inode_table = (a1fs_inode *)();
 	
 	long curr_ino_num = get_ino_num_by_path(path);
 	if (curr_ino_num < 0) {
@@ -382,8 +372,6 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		return curr_ino_num;
 	}
 	a1fs_inode *curr_inode = (image + A1FS_BLOCK_SIZE*(sb->bg_inode_table) + sizeof(a1fs_inode)*(curr_ino_num - 1));
-	// a1fs_extent *curr_extent = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(curr_inode->extentblock));
-	// a1fs_dentry *curr_dir = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE*(curr_extent->start));
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	a1fs_dentry *curr_dir;
@@ -493,7 +481,6 @@ int alloc_an_extent_for_size(a1fs_extent *extent, uint64_t size) {
 	uint32_t blocks_needed = ceil_divide(size, A1FS_BLOCK_SIZE);
 	long some_bit_off = find_free_entry_of_length_in_bitmap(data_bitmap, sb->data_block_count, blocks_needed);
 	if (some_bit_off < 0) { return -ENOSPC; }
-	// Step 7 change here
 	for (uint32_t i = 0; i < blocks_needed; i++) {
 		setBitOn(data_bitmap, some_bit_off + i);
 		(sb->s_free_blocks_count)--;
@@ -512,7 +499,6 @@ void fill_with_dentry(a1fs_blk_t blk_num) {
 	for (uint32_t i = 0; i < A1FS_BLOCK_SIZE / sizeof(a1fs_dentry); i++) {
 		curr_dentry = (a1fs_dentry *) (image + A1FS_BLOCK_SIZE * blk_num + sizeof(a1fs_dentry) * i);
 		curr_dentry->ino = 0;
-		strcpy(curr_dentry->name, "Unused dir");
 	}
 }
 
@@ -554,7 +540,6 @@ long init_new_inode(mode_t mode) {
 	long free_bit = find_free_entry_of_length_in_bitmap(inode_bitmap, sb->s_inodes_count, 1);
 	// out of inodes to allocate, return ENOSPC
 	if (free_bit < 0) { return free_bit; }
-	// int j = 1;
 	a1fs_inode *new_inode = (a1fs_inode *)(image + sb->bg_inode_table * A1FS_BLOCK_SIZE + (free_bit) * sizeof(a1fs_inode));
 	setBitOn(inode_bitmap, free_bit);
 	a1fs_ino_t new_inode_num = free_bit + 1;
@@ -577,25 +562,20 @@ long init_new_inode(mode_t mode) {
 int add_new_inode_to_parent_dir(a1fs_inode *parent_inode, a1fs_ino_t new_ino_num, const char *entryname) {
 	fs_ctx *fs = get_fs();
 	void *image = fs->image;
-	// a1fs_superblock *sb = (a1fs_superblock *)image;
 	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
 	// allocate extent block for the parent_inode if it hasn't allocate any yet
-	// Step 7 extends here
 	if (parent_inode->extentcount == 0) {
 		int ret = init_dir_inode_extent(parent_inode);
 		if (ret != 0) { return ret; }
 	}
 
 	parent_inode->size += sizeof(a1fs_dentry);
-	// a1fs_extent *extentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock));
-	// let new directory entry point to the last spot in block
 	a1fs_dentry *new_dir = NULL;
 	// search for a free directory by checking if the ino == 0
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
 	off_t offset = 0;
 	while (i < parent_inode->dentry_count){
-		// cur_dir = (a1fs_dentry *) (image + (A1FS_BLOCK_SIZE * extentblock->start) + sizeof(a1fs_dentry) * i);
 		cur_dir = (a1fs_dentry *) seekbyte(parent_inode, offset);
 		if (cur_dir->ino == 0){
 			new_dir = cur_dir;
@@ -746,7 +726,7 @@ void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_
 	parent_inode->links --;
 	parent_inode->size -= (sizeof(a1fs_dentry));
 	clock_gettime(CLOCK_REALTIME, &(parent_inode->mtime));
-	// a1fs_extent *parentextentblock = (a1fs_extent *) (image + A1FS_BLOCK_SIZE*(parent_inode->extentblock)); //step7
+
 	uint64_t i = 0;
 	a1fs_dentry *cur_dir;
 	off_t offset = 0;
@@ -779,7 +759,6 @@ void rm_inode_from_parent_directory(a1fs_ino_t parent_ino_num, a1fs_ino_t child_
  */
 static int a1fs_rmdir(const char *path)
 {
-	//TODO
 	if (check_dir_empty(path) == 1) {return -ENOTEMPTY;}
 	long curr_ino_num = get_ino_num_by_path(path);
 	rm_inode((a1fs_ino_t)curr_ino_num);
@@ -1085,7 +1064,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 	void *image = fs->image;
 	a1fs_superblock *sb = (a1fs_superblock *)image;
 	a1fs_ino_t file_ino_num = (a1fs_ino_t) get_ino_num_by_path(path);
-	a1fs_inode *file_ino = (a1fs_inode *)(image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * file_ino_num);
+	a1fs_inode *file_ino = (a1fs_inode *)(image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * (file_ino_num-1));
 	// If file is empty or the offset is beyond EOF, substitude the rest of the data with 0
 	char *currbyte;
 	if (file_ino->size == 0 || (currbyte = (char *)seekbyte(file_ino, offset)) == NULL) {
@@ -1133,7 +1112,7 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	void *image = fs->image; 
 	a1fs_superblock *sb = (a1fs_superblock *) image;
 	a1fs_ino_t file_ino_num = get_ino_num_by_path(path);
-	a1fs_inode *file_ino = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * file_ino_num);
+	a1fs_inode *file_ino = (a1fs_inode *) (image + A1FS_BLOCK_SIZE * sb->bg_inode_table + sizeof(a1fs_inode) * (file_ino_num-1));
 
 	// Nothing to write
 	if (size == 0) {return 0;}
