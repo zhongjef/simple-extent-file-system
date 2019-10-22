@@ -431,11 +431,20 @@ long find_free_entry_of_length_in_bitmap(uint32_t *bitmap, uint32_t limit, uint3
  * @return       the longest length of continuous empty bits
  */
 uint32_t find_largest_chunk(uint32_t *bitmap, uint32_t limit){
-	uint32_t longest = 1;
+	uint32_t longest = 0;
+	uint32_t sec_longest = 0;
 	for (uint32_t bit = 0; bit < limit; bit++) {
 		if (is_bit_off(bitmap, bit)) {
-			longest += 1;
-		} else{ longest = 1;}
+			if (longest == 0) {
+				longest += 1;
+			}
+			sec_longest += 1;
+			if (sec_longest >= longest) {
+				longest = sec_longest;
+			}
+		} else {
+			sec_longest = 0;
+		}
 	}
 	return longest;
 }
